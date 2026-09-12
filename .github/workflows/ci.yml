@@ -1,0 +1,62 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: tests (${{ matrix.os }}, python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The tool reports on paths and shell commands, so the two platforms where
+        # those differ are both part of the contract, not a nicety.
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Run the suite
+        run: python -m unittest discover -s tests -v
+
+  smoke:
+    name: smoke - dry-run the fixtures end to end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: A followable runbook exits 0
+        run: python -m runbook_dry_run tests/fixtures/good.md --base-dir . --execute
+
+      # The negative half. Without it the smoke job passes on a checker that has
+      # been accidentally turned into a no-op, which is the failure this whole
+      # project exists to catch.
+      - name: An unfollowable runbook exits 1
+        run: |
+          set +e
+          python -m runbook_dry_run tests/fixtures/bad-path.md --base-dir .
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then
+            echo "expected exit 1 from a defective runbook, got $code"
+            exit 1
+          fi
+
+      - name: A destructive step leaves no trace
+        run: |
+          python -m runbook_dry_run tests/fixtures/destructive.md --base-dir . --execute
+          if [ -f destructive-marker.tmp ]; then
+            echo "a destructive step was executed during a dry run"
+            exit 1
+          fi

@@ -1,0 +1,5 @@
+# The suite runs on Linux and Windows, and the fixtures are parsed line by line.
+# Normalise in the repository so a checkout on either platform reads identically.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
