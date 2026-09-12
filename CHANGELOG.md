@@ -6,6 +6,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-12
+
+Both entries below come from this tool's first real use, which was checking the
+procedure that publishes this tool. Neither finding was about that procedure; both
+were about the runbook format. The gaps were recorded at the time and fixed
+afterwards, never during - patching a tool mid-first-use destroys the evidence that
+the first use found anything.
+
+### Added
+
+- `Run (expect-fail):` and `Run (expect-fail: <code>):` - a step whose success
+  condition is a command that FAILS. Previously such a step had to delete its command
+  and move the real check into `On failure:` prose, which made the most consequential
+  step in a procedure the only one the tool could not check. Naming the exact code is
+  the stronger form: `git ls-remote` exits `128` for an absent repository and also
+  exits non-zero when the network is down, and only one of those answers the question.
+- `After manual step: <N>` - a step that cannot run until a human has completed step N.
+  Its commands are reported rather than executed, instead of failing under `--execute`
+  for a reason that is not a defect in the procedure.
+- `EXPECTED_FAILURE_NOT_OBSERVED` (error), `MANUAL_GATE_UNRESOLVED` (error) and
+  `COMMAND_DEFERRED_MANUAL_GATE` (info). The middle one exists because a gate naming a
+  step that does not exist would quietly stop the tool from ever executing those
+  commands while reporting a clean run.
+- Eight test cases, twenty in total. One asserts the PRESENCE of a side effect - an
+  `expect-fail` command must leave its marker on disk - because without it a clean
+  report is indistinguishable from a directive the parser silently ignored.
+- `LIMITS.md` records the coverage a gated step removes, and what an expected failure
+  does not prove.
+
+### Changed
+
+- `docs/specs/2026-09-12-runbook-dry-run-design.md` gains section 7, the dated
+  amendment recording why the format grew.
+- `.gitignore` ignores `*.tmp`, so a run interrupted between `setUp` and `tearDown`
+  cannot leave a test marker where it could be committed.
+
+
 ## [0.1.0] - 2026-09-12
 
 ### Added
@@ -23,5 +60,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/specs/2026-09-12-runbook-dry-run-design.md` — the dated design spec, with Non-goals.
 - `LIMITS.md` — what the tool cannot tell you, in the first person.
 
-[Unreleased]: https://github.com/teageryc/runbook-dry-run/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/teageryc/runbook-dry-run/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/teageryc/runbook-dry-run/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/teageryc/runbook-dry-run/releases/tag/v0.1.0

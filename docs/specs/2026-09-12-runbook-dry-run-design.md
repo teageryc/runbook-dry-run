@@ -1,6 +1,6 @@
 # Design — runbook-dry-run | 设计 — 运行手册预演
 
-> **Dated** 2026-09-12 · **Status** accepted · **Supersedes** nothing
+> **Dated** 2026-09-12 · **Status** accepted · **Supersedes** nothing · **Amended** 2026-09-12 for v0.2, see §7
 > This document is the contract. The code is one implementation of it, and where the two disagree, this file is the defect report.
 
 ---
@@ -41,6 +41,9 @@ Elements:
 ## Step 1 — <what the reader is doing>
 Run: `<command>`
 Run (destructive): `<command that is reported, never executed>`
+Run (expect-fail): `<command whose success condition is a non-zero exit>`
+Run (expect-fail: 128): `<command that must exit exactly 128, and nothing else>`
+After manual step: <N>
 Path: `<a path this step depends on>`
 Open: `<element>`
 Click: `<element>`
@@ -48,6 +51,8 @@ On failure: <what the reader does when this step fails>
 ```
 
 Every directive is optional except that each step needs an `On failure:` line. A step with no failure branch is a step that strands whoever hits it.
+
+`After manual step: <N>` declares that this step cannot run until a human has finished step N. Its commands are then reported, not executed, and step N must exist and come first.
 
 ### 4. Finding codes
 
@@ -62,6 +67,9 @@ A finding is always anchored to a step number. `step 0` means the defect belongs
 | `UI_ELEMENT_MISSING` | error | a step names a screen or control absent from the `Elements:` inventory |
 | `COMMAND_FAILED` | error | a `Run:` command exited non-zero under `--execute` |
 | `COMMAND_SKIPPED_DESTRUCTIVE` | info | a step is marked destructive and was therefore not executed |
+| `EXPECTED_FAILURE_NOT_OBSERVED` | error | a `Run (expect-fail):` command exited `0`, or exited a code other than the one the step declared |
+| `MANUAL_GATE_UNRESOLVED` | error | an `After manual step:` names no step number, or one the document does not contain, or one that does not precede this step |
+| `COMMAND_DEFERRED_MANUAL_GATE` | info | a step waits on a manual step, so its commands were not executed under `--execute` |
 
 Exit code is `1` if any finding has severity `error`, otherwise `0`.
 
@@ -82,6 +90,25 @@ Exit code is `1` if any finding has severity `error`, otherwise `0`.
 - Real runbooks turn out not to be writable in this format without contortion, so authors keep two copies. Two copies drift, and the checked one stops being the followed one.
 - The `Elements:` inventory is maintained so rarely that `UI_ELEMENT_MISSING` becomes noise, and readers start passing a flag to silence it.
 - A finding count goes to zero across a repository while operators keep getting stuck, which would mean the codes do not cover the defects that actually strand people.
+
+### 7. Amendment, 2026-09-12 — what the first real use added
+
+This section records why the format grew, because the growth is itself the evidence.
+
+The first procedure ever checked with this tool was the procedure that publishes this tool. It produced two findings, and neither was about that procedure — both were about this format.
+
+**A step whose success condition is a failure had to give up its command.** The step confirming the target repository did not yet exist wanted `git ls-remote` to exit `128`. `Run:` means *must exit 0*, so there was no way to write it; the author deleted the command and moved the real check into the `On failure:` prose. The most consequential step in the procedure ended up as the only one the tool could not check. `Run (expect-fail):` exists so that does not happen again.
+
+**The optional exit code is not decoration.** `git ls-remote` exits `128` when the repository is absent, and also exits non-zero when the network is down or the credential is wrong. A bare *any non-zero passes* would accept the second as proof of the first — the safe-looking answer arrived at for the wrong reason, which is the failure class this tool exists to surface. `Run (expect-fail: 128):` is the stronger declaration and is usually the right one.
+
+**A step that waits on a human reported a failure that was not a defect.** The steps verifying the push and the CI run cannot succeed until the operator has created the repository and pushed. Under `--execute` they failed — correctly, and uselessly. A finding that is noise is a finding readers learn to silence, and §6 above already names that as a sign this design is wrong. `After manual step:` puts the dependency in the document instead.
+
+**The gate is validated, and that is the whole point of `MANUAL_GATE_UNRESOLVED`.** A gate naming a step that does not exist would quietly stop the tool from ever executing those commands, and would report a clean run while doing it. A check that stops checking must say so out loud.
+
+**What was deliberately not done.** Both gaps were recorded at the moment of first use and fixed afterwards, never during. Patching a tool while it is being used for the first time destroys the evidence that the first use found anything.
+
+**Recorded by the second use, not built: the shell a procedure requires.** Re-checking the same procedure at v0.2 produced three `COMMAND_FAILED` findings that are not defects in it. The document declares *Shell: Git Bash* in its own header, and the format cannot express that, so `--execute` ran `cd /g/Projects/...` through `cmd.exe` — Python's `shell=True` resolves to the platform default no matter which shell launched the checker. This is the same shape as the two gaps above: something true, load-bearing and currently only expressible in prose. A `Shell:` directive is the obvious answer and it is not obviously right — honouring it means either refusing to run when the declared shell is unavailable, or invoking it and inheriting a second set of quoting rules. Recorded here, following the same rule that produced this section: the use that finds a gap does not get to patch it.
+
 
 ---
 
@@ -121,6 +148,9 @@ Elements:
 ## Step 1 — <读者在做什么>
 Run: `<命令>`
 Run (destructive): `<只报告、永不执行的命令>`
+Run (expect-fail): `<成功条件是非零退出码的命令>`
+Run (expect-fail: 128): `<必须恰好退出 128、别的都不算的命令>`
+After manual step: <N>
 Path: `<本步骤依赖的路径>`
 Open: `<元素>`
 Click: `<元素>`
@@ -128,6 +158,8 @@ On failure: <本步骤失败时读者该做什么>
 ```
 
 除了每个步骤都必须有一行 `On failure:` 之外，所有指令都是可选的。没有失败分支的步骤，会把撞上它的人困在原地。
+
+`After manual step: <N>` 声明本步骤在人完成第 N 步之前无法运行。它的命令于是只被报告、不被执行，而第 N 步必须存在且在本步骤之前。
 
 ### 四、发现代码
 
@@ -142,6 +174,9 @@ On failure: <本步骤失败时读者该做什么>
 | `UI_ELEMENT_MISSING` | error | 某个步骤提到的屏幕或控件不在 `Elements:` 清单里 |
 | `COMMAND_FAILED` | error | 在 `--execute` 下某个 `Run:` 命令退出码非零 |
 | `COMMAND_SKIPPED_DESTRUCTIVE` | info | 某个步骤被标记为破坏性，因而未被执行 |
+| `EXPECTED_FAILURE_NOT_OBSERVED` | error | 某条 `Run (expect-fail):` 命令退出码为 `0`，或退出码不是步骤声明的那一个 |
+| `MANUAL_GATE_UNRESOLVED` | error | 某个 `After manual step:` 没有点出步骤编号，或点的步骤文档里没有，或点的步骤不在本步骤之前 |
+| `COMMAND_DEFERRED_MANUAL_GATE` | info | 某个步骤在等一个手工步骤，因而在 `--execute` 下它的命令未被执行 |
 
 只要有任何一个发现的严重度是 `error`，退出码为 `1`，否则为 `0`。
 
@@ -162,3 +197,21 @@ On failure: <本步骤失败时读者该做什么>
 - 真实的运行手册在这个格式里写不下来，除非扭曲，于是作者维护两份。两份会漂移，而被检查的那份就不再是被照做的那份。
 - `Elements:` 清单维护得太少，以至于 `UI_ELEMENT_MISSING` 变成噪音，读者开始加参数把它关掉。
 - 整个仓库的发现数降到零，而操作员照样被卡住——那意味着这些代码没有覆盖真正会困住人的缺陷。
+
+### 七、修订，2026-09-12 —— 第一次真实使用带来了什么
+
+这一节记录格式为什么长大，因为这个生长过程本身就是证据。
+
+本工具检查的第一份流程，正是发布本工具的那份流程。它产生了两个发现，而两个都不是关于那份流程的——两个都是关于这个格式的。
+
+**成功条件是失败的步骤，只能放弃自己的命令。** 确认目标仓库尚不存在的那一步，要的是 `git ls-remote` 退出 `128`。而 `Run:` 的含义是*必须退出 0*，于是这一步根本写不出来；作者删掉了命令，把真正的检查挪进了 `On failure:` 的散文里。流程中最要紧的一步，最后成了工具唯一检查不到的一步。`Run (expect-fail):` 的存在就是为了不再发生这件事。
+
+**那个可选的退出码不是装饰。** `git ls-remote` 在仓库不存在时退出 `128`，在网络断了或凭证不对时同样退出非零。光是*任何非零都算通过*，就会把后者当成前者的证据——用错误的理由得到那个看起来安全的答案，而这正是本工具存在所要揭示的失败类别。`Run (expect-fail: 128):` 是更强的声明，通常也是对的那一个。
+
+**等待人的步骤，报出了一个并非缺陷的失败。** 验证推送与验证 CI 的那两步，在操作者建好仓库并推送之前不可能成功。在 `--execute` 下它们失败了——正确地、且毫无用处地失败。噪音式的发现，会训练读者学会把发现关掉，而上面第六节恰恰把这一点列为「这个设计是错的」的迹象。`After manual step:` 改为把这个依赖写进文档。
+
+**闸口是要校验的，这正是 `MANUAL_GATE_UNRESOLVED` 的全部意义。** 一个指向不存在步骤的闸口，会悄悄让工具永远不再执行那些命令，而且一边这么做一边报告运行干净。一个停止检查的检查，必须把这件事说出来。
+
+**刻意没有做的事。** 两个缺口都是在第一次使用的当下记录、事后修复的，绝不在使用过程中。在一个工具第一次被使用的过程中把它补掉，会毁掉「第一次使用确实发现了东西」这个证据。
+
+**第二次使用记录下、但没有建的：流程所要求的 shell。** 用 v0.2 重新检查同一份流程，产生了三个 `COMMAND_FAILED`，而它们都不是那份流程的缺陷。那份文档在自己的头部声明了 *Shell: Git Bash*，而格式表达不了这件事，于是 `--execute` 把 `cd /g/Projects/...` 交给了 `cmd.exe`——Python 的 `shell=True` 在 Windows 上总是解析到平台默认 shell，不管检查器是从哪个 shell 启动的。这与上面两个缺口是同一个形状：一件为真的、承重的、目前只能写在散文里的事。`Shell:` 指令是显而易见的答案，却不是显而易见正确的答案——要遵守它，就得在声明的 shell 不可用时拒绝运行，或者去调用它并因此继承第二套引号规则。记录在此，遵循的正是产生本节的那条规则：发现缺口的那次使用，没有资格顺手把它补掉。

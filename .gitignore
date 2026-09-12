@@ -14,3 +14,7 @@ htmlcov/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Test markers. A run interrupted between setUp and tearDown must not leave
+# one of these where it can be committed.
+*.tmp

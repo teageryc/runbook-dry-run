@@ -49,6 +49,23 @@ On failure: you are not an approver. Ask for the role; do not work around it.
 
 Every directive is optional except `On failure:`. A step without a failure branch strands whoever hits it, so its absence is itself a finding.
 
+Two more directives exist for the steps that broke the first version of this format:
+
+```markdown
+## Step 3 — Confirm the target repository does not exist yet
+Run (expect-fail: 128): `git ls-remote https://github.com/you/thing.git`
+On failure: exit 0 means it already exists. Stop and read it before pushing into it.
+
+## Step 5 — Verify the push landed
+After manual step: 4
+Run: `git ls-remote --heads origin refs/heads/main`
+On failure: nothing reached the remote. Re-read step 4's output.
+```
+
+`Run (expect-fail:)` is for a step whose success condition is a command that **fails**. Name the exact code where you can: `git ls-remote` exits `128` when a repository is absent and also exits non-zero when your network is down, and only one of those answers the question.
+
+`After manual step:` is for a step that cannot run until a human has done something. Its commands are reported rather than executed, instead of failing for a reason that is not a defect.
+
 ### What it checks
 
 | Code | Fires when |
@@ -58,7 +75,9 @@ Every directive is optional except `On failure:`. A step without a failure branc
 | `UI_ELEMENT_MISSING` | a step names a screen or control absent from the `Elements:` inventory |
 | `NO_FAILURE_BRANCH` | a step never says what to do when it fails |
 | `MISSING_WORKING_DIRECTORY` · `NO_STEPS` | the document itself is unusable |
-| `COMMAND_SKIPPED_DESTRUCTIVE` | informational: a destructive step was reported, not executed |
+| `EXPECTED_FAILURE_NOT_OBSERVED` | a `Run (expect-fail):` command exited `0`, or exited a code other than the declared one |
+| `MANUAL_GATE_UNRESOLVED` | an `After manual step:` names a step that does not exist or does not come first |
+| `COMMAND_SKIPPED_DESTRUCTIVE` · `COMMAND_DEFERRED_MANUAL_GATE` | informational: a step was reported, not executed |
 
 ### Two things worth knowing before you trust it
 
@@ -72,7 +91,9 @@ A step marked `Run (destructive):` is **never** executed, with or without `--exe
 python -m unittest discover -s tests -v
 ```
 
-Twelve cases. Every one asserts a finding code **and** the step number it must land on, because a suite that only asserts "a finding was produced" also passes on a checker that reports every step as broken.
+Twenty cases. Every one asserts a finding code **and** the step number it must land on, because a suite that only asserts "a finding was produced" also passes on a checker that reports every step as broken.
+
+Two of them assert a side effect rather than a report: a destructive command must leave **no** marker on disk, and an `expect-fail` command must leave **one**. Without the second, a clean report is indistinguishable from a directive the parser silently ignored.
 
 MIT licensed.
 
@@ -121,6 +142,23 @@ On failure: you are not an approver. Ask for the role; do not work around it.
 
 除 `On failure:` 外所有指令都是可选的。没有失败分支的步骤会把撞上它的人困在原地，所以它的缺席本身就是一个发现。
 
+还有两条指令，是为那些把这个格式的第一版撑破的步骤而存在的：
+
+```markdown
+## Step 3 — Confirm the target repository does not exist yet
+Run (expect-fail: 128): `git ls-remote https://github.com/you/thing.git`
+On failure: exit 0 means it already exists. Stop and read it before pushing into it.
+
+## Step 5 — Verify the push landed
+After manual step: 4
+Run: `git ls-remote --heads origin refs/heads/main`
+On failure: nothing reached the remote. Re-read step 4's output.
+```
+
+`Run (expect-fail:)` 用于成功条件是命令**失败**的步骤。能点明确切退出码就点明：`git ls-remote` 在仓库不存在时退出 `128`，在你网络断了时同样退出非零，而只有其中一个回答了你要问的问题。
+
+`After manual step:` 用于在人做完某件事之前无法运行的步骤。它的命令只被报告、不被执行，而不是因为一个并非缺陷的理由失败。
+
 ### 它检查什么
 
 | 代码 | 触发条件 |
@@ -130,7 +168,9 @@ On failure: you are not an approver. Ask for the role; do not work around it.
 | `UI_ELEMENT_MISSING` | 步骤提到的屏幕或控件不在 `Elements:` 清单里 |
 | `NO_FAILURE_BRANCH` | 步骤从未说明失败时该做什么 |
 | `MISSING_WORKING_DIRECTORY` · `NO_STEPS` | 文档本身不可用 |
-| `COMMAND_SKIPPED_DESTRUCTIVE` | 提示性：破坏性步骤被报告，未被执行 |
+| `EXPECTED_FAILURE_NOT_OBSERVED` | 某条 `Run (expect-fail):` 命令退出码为 `0`，或不是声明的那一个 |
+| `MANUAL_GATE_UNRESOLVED` | 某个 `After manual step:` 点的步骤不存在，或不在本步骤之前 |
+| `COMMAND_SKIPPED_DESTRUCTIVE` · `COMMAND_DEFERRED_MANUAL_GATE` | 提示性：步骤被报告，未被执行 |
 
 ### 信任它之前值得知道的两件事
 
@@ -144,6 +184,8 @@ On failure: you are not an approver. Ask for the role; do not work around it.
 python -m unittest discover -s tests -v
 ```
 
-十二个用例。每一个都同时断言发现代码**和**它必须落在的步骤编号，因为只断言"产生了某个发现"的套件，在一个把每一步都报成坏掉的检查器上也会通过。
+二十个用例。每一个都同时断言发现代码**和**它必须落在的步骤编号，因为只断言"产生了某个发现"的套件，在一个把每一步都报成坏掉的检查器上也会通过。
+
+其中两个断言的是副作用而不是报告：破坏性命令必须在磁盘上**不留**标记，而 `expect-fail` 命令必须留下**一个**。没有后者，「报告干净」与「解析器默默忽略了这条指令」就分不出来。
 
 MIT 许可证。

@@ -22,6 +22,10 @@
 
 **It cannot see anything that depends on time or on state I did not touch.** A credential that expires next week, a queue that is empty today, a report that only exists after month-end, a step whose command is read-only today and destructive under a different flag — all invisible.
 
+**A gated step is a step I did not check, and the report does not shout about it.** When a step declares `After manual step:`, I report its commands rather than running them, and the finding that says so is informational. Under `--execute` the sentence *every command was run and passed* is therefore false for exactly those steps — read the `COMMAND_DEFERRED_MANUAL_GATE` lines as the list of what a clean report does not cover. The more honestly a runbook declares its human dependencies, the less of it I have actually proven.
+
+**An expected failure proves less than it looks like it proves.** `Run (expect-fail):` with no code accepts any non-zero exit, and a command can fail for reasons that have nothing to do with the question the step is asking — an unreachable network, a wrong credential, a missing binary. I will report that as satisfied. Naming the exact code narrows this and does not close it: the same code can still arrive by a different road.
+
 **It cannot judge a step that requires a human decision.** "Compare the two figures and decide whether to proceed" is checkable only for its failure branch. Whether the reader can actually make that judgement is exactly what a walk-through is for, and that is the thing I most want to be understood as not replacing.
 
 ---
@@ -45,5 +49,9 @@
 **Shell 的引号规则是继承的，不是归一化的。**命令通过平台自己的 shell 运行。一条在作者机器上成功、在 Linux 容器里失败的命令，确实是关于这份手册的真实发现，但我会把它报成 `COMMAND_FAILED`，而不会告诉你问题出在可移植性而不是命令本身。
 
 **凡是依赖时间、或依赖我没有触碰的状态的，我都看不见。**下周过期的凭证、今天恰好为空的队列、只在月结之后才存在的报表、今天只读但换个参数就具破坏性的命令——全都不可见。
+
+**被闸住的步骤是我没有检查的步骤，而报告不会为此大声说话。**当某一步声明了 `After manual step:`，我只报告它的命令而不运行它们，并且说明这件事的那个发现是提示性的。于是在 `--execute` 下，*每条命令都运行过且通过了*这句话，对这些步骤恰恰是假的——请把 `COMMAND_DEFERRED_MANUAL_GATE` 那几行读作「一份干净的报告没有覆盖到什么」的清单。一份手册越诚实地声明它对人的依赖，我真正证明过的部分就越少。
+
+**预期中的失败，证明的东西比它看起来要少。**不带退出码的 `Run (expect-fail):` 接受任何非零退出，而一条命令失败的原因，可能与这一步要问的问题毫无关系——网络不通、凭证不对、可执行文件不存在。我都会报成满足。点明确切的退出码能收窄这一点，但不能封死它：同一个退出码仍然可能是从另一条路来的。
 
 **它无法判断需要人做决定的步骤。**「比较两个数字并决定是否继续」——我只能检查它的失败分支。读者是否真的做得出那个判断，恰恰是走一遍流程要回答的问题，而这正是我最希望被理解为"本工具不替代"的那件事。

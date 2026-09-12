@@ -60,3 +60,34 @@ jobs:
             echo "a destructive step was executed during a dry run"
             exit 1
           fi
+
+      # The positive half of the same assertion. A command the checker claims to have
+      # run must leave proof, or "exit 0" is indistinguishable from a directive the
+      # parser silently dropped - a clean report produced by not looking.
+      - name: An expected failure is satisfied, and the command really ran
+        run: |
+          python -m runbook_dry_run tests/fixtures/expect-fail.md --base-dir . --execute
+          if [ ! -f expect-fail-marker.tmp ]; then
+            echo "the expect-fail command never ran, so its clean report means nothing"
+            exit 1
+          fi
+          rm -f expect-fail-marker.tmp
+
+      - name: A step gated on a human is reported, not executed
+        run: |
+          python -m runbook_dry_run tests/fixtures/manual-gate.md --base-dir . --execute
+          if [ -f manual-gate-marker.tmp ]; then
+            echo "a gated step ran before the manual step it was waiting on"
+            exit 1
+          fi
+
+      - name: A gate naming a step that does not exist exits 1
+        run: |
+          set +e
+          python -m runbook_dry_run tests/fixtures/bad-manual-gate.md --base-dir .
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then
+            echo "expected exit 1 from an unresolved manual gate, got $code"
+            exit 1
+          fi
