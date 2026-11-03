@@ -54,6 +54,7 @@ FINDING_CODES = {
     "EXPECTED_FAILURE_NOT_OBSERVED": "the step declared its command would fail and it did not",
     "COMMAND_DEFERRED_MANUAL_GATE": "the step waits on a human and its commands were not executed",
     "MANUAL_GATE_UNRESOLVED": "the step waits on a step that does not exist or does not precede it",
+    "SHELL_UNRESOLVED": "the document names a shell this tool does not know or this machine does not have",
 }
 
 
@@ -348,7 +349,19 @@ def check(
     launcher: tuple[str, ...] = ()
     if book.shell is not None:
         resolved, problem = resolve_shell(book.shell)
-        if resolved is not None:
+        if resolved is None:
+            findings.append(
+                Finding(
+                    0,
+                    "",
+                    "SHELL_UNRESOLVED",
+                    f"{problem}, so no command in this document was executed",
+                )
+            )
+            # Falling back to the platform default is the behaviour that produced
+            # three COMMAND_FAILED findings that were not defects (spec section 8).
+            execute = False
+        else:
             launcher = resolved
 
     base = base_dir or (declared if declared else os.getcwd())

@@ -330,5 +330,53 @@ class ShellResolution(unittest.TestCase):
         self.assertIsNone(resolve_shell("powershell")[0])
 
 
+class UnresolvedShell(unittest.TestCase):
+    """A check that stops checking must say so out loud, and must really stop.
+
+    Asserted by the ABSENCE of the marker, paired with ShellDirective's test that
+    the same kind of command DOES leave one when the shell resolves.
+    """
+
+    MARKERS = [
+        os.path.join(REPO_ROOT, "shell-unknown-marker.tmp"),
+        os.path.join(REPO_ROOT, "shell-bash-marker.tmp"),
+    ]
+
+    def setUp(self):
+        for marker in self.MARKERS:
+            if os.path.exists(marker):
+                os.remove(marker)
+
+    tearDown = setUp
+
+    def test_an_unknown_shell_is_reported_once_and_nothing_runs(self):
+        findings = run_fixture("shell-unknown.md", execute=True)
+        self.assertEqual(["SHELL_UNRESOLVED"], [f.code for f in findings])
+        self.assertEqual(0, findings[0].step)
+        self.assertIn("fish", findings[0].detail)
+        self.assertIn("no command in this document was executed", findings[0].detail)
+        self.assertTrue(has_errors(findings))
+        self.assertFalse(
+            os.path.exists(self.MARKERS[0]),
+            "a command ran under a shell that could not be resolved",
+        )
+
+    def test_it_is_reported_without_execute_too(self):
+        findings = run_fixture("shell-unknown.md")
+        self.assertEqual(["SHELL_UNRESOLVED"], [f.code for f in findings])
+
+    def test_an_unavailable_shell_refuses_on_every_platform(self):
+        with mock.patch(
+            "runbook_dry_run.checker.resolve_shell", return_value=(None, "pwsh is not on PATH")
+        ):
+            findings = run_fixture("shell-bash.md", execute=True)
+        self.assertEqual(["SHELL_UNRESOLVED"], [f.code for f in findings])
+        self.assertIn("pwsh is not on PATH", findings[0].detail)
+        self.assertFalse(
+            os.path.exists(self.MARKERS[1]),
+            "a command ran under a shell reported unavailable",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
