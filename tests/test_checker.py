@@ -17,6 +17,7 @@ FIXTURES = os.path.join(REPO_ROOT, "tests", "fixtures")
 sys.path.insert(0, REPO_ROOT)
 
 from runbook_dry_run.checker import (  # noqa: E402
+    Launcher,
     Runbook,
     Step,
     check,
@@ -293,6 +294,21 @@ class ShellDirective(unittest.TestCase):
         findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
         self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 1))
 
+    def test_backslashes_reach_bash_unaltered(self):
+        """Windows re-parses a command line by rules Git Bash's runtime does not share.
+
+        Passed as an argument, a backslash pair before a quote arrived halved. The
+        command now travels in an environment variable, which nothing re-parses.
+        """
+        text = one_step("Shell: `bash`", r"Run: `x='a\\'; [ ${#x} -eq 3 ]`")
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertEqual([], findings, msg=f"unexpected findings: {findings}")
+
+    def test_the_backslash_probe_can_fail(self):
+        text = one_step("Shell: `bash`", r"Run: `x='a\\'; [ ${#x} -eq 2 ]`")
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 1))
+
     @unittest.skipUnless(shutil.which("pwsh"), "pwsh is not installed")
     def test_a_declared_pwsh_runs_the_command_in_pwsh(self):
         findings = check(
@@ -316,14 +332,15 @@ class ShellResolution(unittest.TestCase):
         launcher, reason = resolve_shell("fish")
         self.assertIsNone(launcher)
         self.assertIn("'fish'", reason)
-        self.assertIn("Git Bash", reason)
+        for known in ("bash", "Git Bash", "pwsh", "powershell", "cmd"):
+            self.assertIn(known, reason)
 
     @unittest.skipUnless(sys.platform == "win32", "the Git Bash lookup is Windows-only")
     def test_windows_bash_comes_from_git_never_from_path(self):
         """On the machine this was built on, PATH answers bash with the WSL launcher."""
         launcher, _ = resolve_shell("bash")
         self.assertIsNotNone(launcher)
-        exe = launcher[0].casefold()
+        exe = launcher.argv[0].casefold()
         self.assertTrue(exe.endswith(os.path.join("bin", "bash.exe")), exe)
         self.assertNotIn("windowsapps", exe)
         self.assertNotIn("system32", exe)
@@ -337,7 +354,7 @@ class ShellResolution(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "win32", "cmd exists only on Windows")
     def test_cmd_on_windows_is_the_platform_default(self):
-        self.assertEqual(((), ""), resolve_shell("cmd"))
+        self.assertEqual((Launcher(), ""), resolve_shell("cmd"))
 
     @unittest.skipIf(sys.platform == "win32", "cmd and powershell exist on Windows")
     def test_cmd_and_powershell_are_refused_elsewhere(self):

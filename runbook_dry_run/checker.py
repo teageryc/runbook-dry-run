@@ -31,16 +31,19 @@ ELEMENTS_HEADING = re.compile(r"^Elements\s*:\s*$")
 BULLET = re.compile(r"^[-*]\s+(.*?)\s*$")
 BACKTICKED = re.compile(r"`([^`]+)`")
 
-# Accepted `Shell:` names, case-insensitive, mapped to the shell actually resolved.
+# `Shell:` names as a reader writes them (matched case-insensitively), mapped to
+# the shell each one means. The single source for the names the tool accepts.
 SHELL_NAMES = {
     "bash": "bash",
-    "git bash": "bash",
+    "Git Bash": "bash",
     "pwsh": "pwsh",
     "powershell": "powershell",
     "cmd": "cmd",
 }
-KNOWN_SHELLS = "bash, Git Bash, pwsh, powershell, cmd"
+_SHELL_KEYS = {name.casefold(): shell for name, shell in SHELL_NAMES.items()}
+KNOWN_SHELLS = ", ".join(SHELL_NAMES)
 POWERSHELL_FLAGS = ("-NoProfile", "-NonInteractive", "-Command")
+COMMAND_VARIABLE = "RUNBOOK_DRY_RUN_COMMAND"
 
 # Documented in docs/specs/2026-09-12-runbook-dry-run-design.md, section 4.
 FINDING_CODES = {
@@ -100,6 +103,21 @@ class Step:
     failure_branch: str | None = None
     manual_gate: int | None = None
     manual_gate_declared: bool = False
+
+
+@dataclass(frozen=True)
+class Launcher:
+    """How a command reaches the shell it was written for.
+
+    An empty `argv` means the platform default through `shell=True`, which on
+    Windows is cmd.exe. With `via_environment`, the command is handed over in
+    COMMAND_VARIABLE instead of as an argument: Windows re-parses a command line by
+    MSVC rules and Git Bash's runtime by its own, so a backslash pair before a
+    quote arrived halved. An environment variable is never re-parsed.
+    """
+
+    argv: tuple[str, ...] = ()
+    via_environment: bool = False
 
 
 @dataclass
@@ -213,7 +231,7 @@ def _resolve(path: str, base: str) -> str:
     return os.path.normpath(os.path.join(base, expanded))
 
 
-def _git_bash() -> tuple[tuple[str, ...] | None, str]:
+def _git_bash() -> tuple[str | None, str]:
     """Find Git Bash through git's own installation, never through PATH.
 
     On Windows, PATH answers `bash` with the WSL launcher (System32 or the
@@ -231,46 +249,59 @@ def _git_bash() -> tuple[tuple[str, ...] | None, str]:
     except (OSError, subprocess.TimeoutExpired) as exc:
         return None, f"git --exec-path did not answer: {exc}"
     start = probe.stdout.strip()
-    if probe.returncode != 0 or not start:
+    if probe.returncode != 0:
         return None, f"git --exec-path exited {probe.returncode}"
+    if not start:
+        return None, "git --exec-path printed nothing"
     directory = os.path.normpath(start)
     for _ in range(4):
         candidate = os.path.join(directory, "bin", "bash.exe")
         if os.path.isfile(candidate):
-            return (candidate, "-c"), ""
+            return candidate, ""
         directory = os.path.dirname(directory)
-    return None, f"no bin/bash.exe in the four directories above git's exec path {start}"
+    return None, f"no bin/bash.exe in git's exec path {start} or the three directories above it"
 
 
-def resolve_shell(declared: str) -> tuple[tuple[str, ...] | None, str]:
-    """Turn a `Shell:` name into the argv prefix that runs a command in that shell.
+def _shell_of(declared: str) -> str | None:
+    """The shell a `Shell:` name means, or None for a name this tool does not know."""
+    return _SHELL_KEYS.get(declared.strip().casefold())
 
-    Returns (prefix, "") when the shell is usable and (None, reason) when it is
-    not. An empty prefix means the platform default through `shell=True`, which
-    on Windows is cmd.exe.
+
+def resolve_shell(declared: str) -> tuple[Launcher | None, str]:
+    """Turn a `Shell:` name into the Launcher that runs a command in that shell.
+
+    Returns (launcher, "") when the shell is usable here and (None, reason) when
+    it is not. Every shell has its own branch; nothing falls through to another
+    shell's arguments.
     """
     name = declared.strip()
-    key = SHELL_NAMES.get(name.casefold())
-    if key is None:
+    shell = _shell_of(name)
+    if shell is None:
         return None, f"{name!r} is not a shell this tool knows ({KNOWN_SHELLS})"
     windows = sys.platform == "win32"
-    if key == "cmd":
-        return ((), "") if windows else (None, "cmd exists only on Windows")
-    if key == "bash":
+    if shell == "cmd":
+        return (Launcher(), "") if windows else (None, "cmd exists only on Windows")
+    if shell == "bash":
         if windows:
-            return _git_bash()
-        found = shutil.which("bash")
-        return ((found, "-c"), "") if found else (None, "bash is not on PATH")
-    if key == "powershell" and not windows:
-        return None, "powershell (Windows PowerShell) exists only on Windows; declare pwsh"
-    found = shutil.which(key)
-    if found is None:
-        return None, f"{key} is not on PATH"
-    return (found, *POWERSHELL_FLAGS), ""
+            found, problem = _git_bash()
+        else:
+            found = shutil.which("bash")
+            problem = "" if found else "bash is not on PATH"
+        if found is None:
+            return None, problem
+        return Launcher((found, "-c", f'eval "${COMMAND_VARIABLE}"'), via_environment=True), ""
+    if shell in ("pwsh", "powershell"):
+        if shell == "powershell" and not windows:
+            return None, "powershell (Windows PowerShell) exists only on Windows; declare pwsh"
+        found = shutil.which(shell)
+        if found is None:
+            return None, f"{shell} is not on PATH"
+        return Launcher((found, *POWERSHELL_FLAGS)), ""
+    return None, f"{name!r} names a shell with no launcher defined"
 
 
 def _run(
-    command: str, cwd: str, timeout: float, launcher: tuple[str, ...] = ()
+    command: str, cwd: str, timeout: float, launcher: Launcher = Launcher()
 ) -> tuple[int, str]:
     """Run one command and read its exit code UNPIPED.
 
@@ -278,13 +309,22 @@ def _run(
     anything - a pager, a formatter, `tee` - makes the pipeline's status the one
     you see, and a failing step then reports success.
 
-    With a launcher, the command is handed to the declared shell as one argument;
-    without one, the platform default runs it, exactly as before v0.3.
+    With a launcher, the declared shell runs the command; without one, the
+    platform default does, exactly as before v0.3.
     """
+    env = None
+    if not launcher.argv:
+        args: str | list[str] = command
+    elif launcher.via_environment:
+        args = list(launcher.argv)
+        env = {**os.environ, COMMAND_VARIABLE: command}
+    else:
+        args = [*launcher.argv, command]
     try:
         proc = subprocess.run(
-            [*launcher, command] if launcher else command,
-            shell=not launcher,
+            args,
+            shell=not launcher.argv,
+            env=env,
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -348,7 +388,7 @@ def check(
             )
         )
 
-    launcher: tuple[str, ...] = ()
+    launcher = Launcher()
     if book.shell is not None:
         resolved, problem = resolve_shell(book.shell)
         if resolved is None:
