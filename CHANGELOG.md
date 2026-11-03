@@ -6,6 +6,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-03
+
+Built after the second real use, never during it. Re-checking the publishing
+procedure at v0.2 produced three `COMMAND_FAILED` findings that were not defects:
+the document declared Git Bash in its header, and the format could not say so.
+
+### Added
+
+- `Shell: <name>` - document-level; `bash` (alias `Git Bash`), `pwsh`, `powershell`
+  or `cmd`, case-insensitive. Under `--execute` every command runs in that shell.
+- `SHELL_UNRESOLVED` (error, step 0) - an unknown name, or a shell this machine does
+  not have. No command in the document is then executed, with or without
+  `--execute`. Falling back to the platform default was rejected: it is the
+  behaviour that produced the three false findings.
+- On Windows, Git Bash is found by walking up from `git --exec-path` to
+  `bin\bash.exe`, never through `PATH`: on the machine this was built on,
+  `shutil.which("bash")` answers with the WSL launcher in `WindowsApps`.
+- Fifteen test cases, thirty-five in total, some platform-specific and skipped
+  elsewhere. The declared-bash fixture must leave its marker; an unresolved shell
+  must leave none. Its bash probe is `[[ ]]`, because a runner launched from Git
+  Bash puts coreutils' `[.exe` on `PATH`, where `cmd.exe` finds it and a
+  single-bracket probe passes in the wrong shell.
+
+### Changed
+
+- The spec gains section 8 and the `Shell:` line in sections 3 and 4; section 7's
+  "not built" carries a dated correction.
+- `LIMITS.md` records four limits of the directive, and its quoting paragraph now
+  names the declared shell.
+- `.github/workflows/ci.yml` smokes the directive both ways: a declared shell must
+  leave its marker, an unresolved one must exit `1` and leave none.
+
+### Fixed
+
+- `runbook_dry_run.__version__` read `0.1.0` through the 0.2.0 release; it now
+  matches this changelog.
+
 ## [0.2.0] - 2026-09-12
 
 Both entries below come from this tool's first real use, which was checking the
@@ -60,6 +97,7 @@ the first use found anything.
 - `docs/specs/2026-09-12-runbook-dry-run-design.md` — the dated design spec, with Non-goals.
 - `LIMITS.md` — what the tool cannot tell you, in the first person.
 
-[Unreleased]: https://github.com/teageryc/runbook-dry-run/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/teageryc/runbook-dry-run/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/teageryc/runbook-dry-run/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/teageryc/runbook-dry-run/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/teageryc/runbook-dry-run/releases/tag/v0.1.0

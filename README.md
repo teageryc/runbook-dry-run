@@ -66,6 +66,15 @@ On failure: nothing reached the remote. Re-read step 4's output.
 
 `After manual step:` is for a step that cannot run until a human has done something. Its commands are reported rather than executed, instead of failing for a reason that is not a defect.
 
+One directive belongs to the document rather than to a step:
+
+```markdown
+Working directory: `/srv/ledger`
+Shell: `Git Bash`
+```
+
+`Shell:` names the shell the commands are written for - `bash` (or `Git Bash`), `pwsh`, `powershell` or `cmd` - and `--execute` runs them in it. On Windows, Git Bash is found through git's own installation, never through `PATH`, which can answer with the WSL launcher. If the declared shell cannot be found, nothing is executed and the report says so. A document with no `Shell:` line runs in the platform default, as before.
+
 ### What it checks
 
 | Code | Fires when |
@@ -77,6 +86,7 @@ On failure: nothing reached the remote. Re-read step 4's output.
 | `MISSING_WORKING_DIRECTORY` · `NO_STEPS` | the document itself is unusable |
 | `EXPECTED_FAILURE_NOT_OBSERVED` | a `Run (expect-fail):` command exited `0`, or exited a code other than the declared one |
 | `MANUAL_GATE_UNRESOLVED` | an `After manual step:` names a step that does not exist or does not come first |
+| `SHELL_UNRESOLVED` | the `Shell:` line names a shell this tool does not know, or one this machine does not have; nothing is then executed |
 | `COMMAND_SKIPPED_DESTRUCTIVE` · `COMMAND_DEFERRED_MANUAL_GATE` | informational: a step was reported, not executed |
 
 ### Two things worth knowing before you trust it
@@ -91,9 +101,9 @@ A step marked `Run (destructive):` is **never** executed, with or without `--exe
 python -m unittest discover -s tests -v
 ```
 
-Twenty cases. Every one asserts a finding code **and** the step number it must land on, because a suite that only asserts "a finding was produced" also passes on a checker that reports every step as broken.
+Thirty-five cases, a few of them platform-specific and skipped elsewhere. Every one asserts a finding code **and** the step number it must land on, because a suite that only asserts "a finding was produced" also passes on a checker that reports every step as broken.
 
-Two of them assert a side effect rather than a report: a destructive command must leave **no** marker on disk, and an `expect-fail` command must leave **one**. Without the second, a clean report is indistinguishable from a directive the parser silently ignored.
+Two of them assert a side effect rather than a report: a destructive command must leave **no** marker on disk, and an `expect-fail` command must leave **one**. Without the second, a clean report is indistinguishable from a directive the parser silently ignored. A runbook declaring `Shell:` must leave its marker too, and one whose shell cannot be found must leave none.
 
 MIT licensed.
 
@@ -159,6 +169,15 @@ On failure: nothing reached the remote. Re-read step 4's output.
 
 `After manual step:` 用于在人做完某件事之前无法运行的步骤。它的命令只被报告、不被执行，而不是因为一个并非缺陷的理由失败。
 
+有一条指令属于整份文档，而不属于某个步骤：
+
+```markdown
+Working directory: `/srv/ledger`
+Shell: `Git Bash`
+```
+
+`Shell:` 点明命令是为哪个 shell 写的——`bash`（或 `Git Bash`）、`pwsh`、`powershell` 或 `cmd`——`--execute` 就在那个 shell 里运行它们。在 Windows 上，Git Bash 通过 git 自己的安装目录找到，绝不通过 `PATH`，因为 `PATH` 可能给出 WSL 启动器。声明的 shell 找不到时，什么都不执行，报告会说明这一点。没有 `Shell:` 行的文档照旧在平台默认 shell 里运行。
+
 ### 它检查什么
 
 | 代码 | 触发条件 |
@@ -170,6 +189,7 @@ On failure: nothing reached the remote. Re-read step 4's output.
 | `MISSING_WORKING_DIRECTORY` · `NO_STEPS` | 文档本身不可用 |
 | `EXPECTED_FAILURE_NOT_OBSERVED` | 某条 `Run (expect-fail):` 命令退出码为 `0`，或不是声明的那一个 |
 | `MANUAL_GATE_UNRESOLVED` | 某个 `After manual step:` 点的步骤不存在，或不在本步骤之前 |
+| `SHELL_UNRESOLVED` | `Shell:` 行点名的 shell 本工具不认识，或这台机器上没有；此时什么都不执行 |
 | `COMMAND_SKIPPED_DESTRUCTIVE` · `COMMAND_DEFERRED_MANUAL_GATE` | 提示性：步骤被报告，未被执行 |
 
 ### 信任它之前值得知道的两件事
@@ -184,8 +204,8 @@ On failure: nothing reached the remote. Re-read step 4's output.
 python -m unittest discover -s tests -v
 ```
 
-二十个用例。每一个都同时断言发现代码**和**它必须落在的步骤编号，因为只断言"产生了某个发现"的套件，在一个把每一步都报成坏掉的检查器上也会通过。
+三十五个用例，其中几个只适用于特定平台，在别的平台上跳过。每一个都同时断言发现代码**和**它必须落在的步骤编号，因为只断言"产生了某个发现"的套件，在一个把每一步都报成坏掉的检查器上也会通过。
 
-其中两个断言的是副作用而不是报告：破坏性命令必须在磁盘上**不留**标记，而 `expect-fail` 命令必须留下**一个**。没有后者，「报告干净」与「解析器默默忽略了这条指令」就分不出来。
+其中两个断言的是副作用而不是报告：破坏性命令必须在磁盘上**不留**标记，而 `expect-fail` 命令必须留下**一个**。没有后者，「报告干净」与「解析器默默忽略了这条指令」就分不出来。声明了 `Shell:` 的手册同样必须留下标记，而 shell 找不到的手册必须一个都不留。
 
 MIT 许可证。

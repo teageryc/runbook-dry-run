@@ -3,4 +3,4 @@
 from .checker import Finding, Runbook, Step, check, parse
 
 __all__ = ["Finding", "Runbook", "Step", "check", "parse"]
-__version__ = "0.1.0"
+__version__ = "0.3.0"
