@@ -451,21 +451,45 @@ class UnresolvedShell(unittest.TestCase):
             "a command ran under a shell that could not be resolved",
         )
 
-    def test_it_is_reported_without_execute_too(self):
+    def test_an_unknown_name_is_reported_without_execute_too(self):
+        """A name the tool does not know is a defect in the document, on any machine."""
         findings = run_fixture("shell-unknown.md")
-        self.assertEqual(["SHELL_UNRESOLVED"], [f.code for f in findings])
+        self.assertEqual({"SHELL_UNRESOLVED"}, codes_at(findings, 0))
+        self.assertEqual(1, len(findings), msg=f"expected exactly one: {findings}")
 
     def test_an_unavailable_shell_refuses_on_every_platform(self):
         with mock.patch(
             "runbook_dry_run.checker.resolve_shell", return_value=(None, "pwsh is not on PATH")
         ):
             findings = run_fixture("shell-bash.md", execute=True)
-        self.assertEqual(["SHELL_UNRESOLVED"], [f.code for f in findings])
+        self.assertEqual({"SHELL_UNRESOLVED"}, codes_at(findings, 0))
+        self.assertEqual(1, len(findings), msg=f"expected exactly one: {findings}")
         self.assertIn("pwsh is not on PATH", findings[0].detail)
         self.assertFalse(
             os.path.exists(self.MARKERS[1]),
             "a command ran under a shell reported unavailable",
         )
+
+    def test_without_execute_availability_is_never_checked(self):
+        """The checking machine is not the reader's machine.
+
+        A path-only CI run on Linux must not fail a Windows runbook for declaring a
+        shell only Windows has - and must spawn nothing to find out.
+        """
+        with mock.patch("runbook_dry_run.checker.resolve_shell") as resolve:
+            findings = run_fixture("shell-bash.md")
+        resolve.assert_not_called()
+        self.assertEqual([], findings, msg=f"unexpected findings: {findings}")
+
+    def test_a_document_with_nothing_to_run_never_asks(self):
+        text = one_step("Shell: `pwsh`", "Run (destructive): `Remove-Item -Recurse build`")
+        with mock.patch(
+            "runbook_dry_run.checker.resolve_shell", return_value=(None, "pwsh is not on PATH")
+        ) as resolve:
+            findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        resolve.assert_not_called()
+        self.assertEqual({"COMMAND_SKIPPED_DESTRUCTIVE"}, codes_at(findings, 1))
+        self.assertFalse(has_errors(findings))
 
 
 if __name__ == "__main__":

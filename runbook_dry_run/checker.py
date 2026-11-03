@@ -288,6 +288,18 @@ def _shell_of(declared: str) -> str | None:
     return _SHELL_KEYS.get(declared.strip().casefold())
 
 
+def _unknown_shell(declared: str) -> str:
+    return f"{declared.strip()!r} is not a shell this tool knows ({KNOWN_SHELLS})"
+
+
+def _has_commands_to_run(book: Runbook) -> bool:
+    """Whether --execute would run anything: gated and destructive commands never run."""
+    return any(
+        not step.manual_gate_declared and (step.commands or step.expect_fail_commands)
+        for step in book.steps
+    )
+
+
 def resolve_shell(declared: str) -> tuple[Launcher | None, str]:
     """Turn a `Shell:` name into the Launcher that runs a command in that shell.
 
@@ -298,7 +310,7 @@ def resolve_shell(declared: str) -> tuple[Launcher | None, str]:
     name = declared.strip()
     shell = _shell_of(name)
     if shell is None:
-        return None, f"{name!r} is not a shell this tool knows ({KNOWN_SHELLS})"
+        return None, _unknown_shell(name)
     windows = sys.platform == "win32"
     if shell == "cmd":
         return (Launcher(), "") if windows else (None, "cmd exists only on Windows")
@@ -410,22 +422,31 @@ def check(
         )
 
     launcher = Launcher()
+    shell_problem: str | None = None
     if book.shell is not None:
-        resolved, problem = resolve_shell(book.shell)
-        if resolved is None:
-            findings.append(
-                Finding(
-                    0,
-                    "",
-                    "SHELL_UNRESOLVED",
-                    f"{problem}, so no command in this document was executed",
-                )
+        if _shell_of(book.shell) is None:
+            # A name the tool does not know is a defect in the document, on any machine.
+            shell_problem = _unknown_shell(book.shell)
+        elif execute and _has_commands_to_run(book):
+            # Whether the shell exists is a fact about THIS machine, which is not the
+            # reader's; it is asked only when a command is about to run here.
+            resolved, problem = resolve_shell(book.shell)
+            if resolved is None:
+                shell_problem = problem
+            else:
+                launcher = resolved
+    if shell_problem is not None:
+        findings.append(
+            Finding(
+                0,
+                "",
+                "SHELL_UNRESOLVED",
+                f"{shell_problem}, so no command in this document was executed",
             )
-            # Falling back to the platform default is the behaviour that produced
-            # three COMMAND_FAILED findings that were not defects (spec section 8).
-            execute = False
-        else:
-            launcher = resolved
+        )
+        # Falling back to the platform default is the behaviour that produced three
+        # COMMAND_FAILED findings that were not defects (spec section 8).
+        execute = False
 
     base = base_dir or (declared if declared else os.getcwd())
     base = os.path.abspath(os.path.expanduser(os.path.expandvars(base)))
