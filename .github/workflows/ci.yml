@@ -91,3 +91,27 @@ jobs:
             echo "expected exit 1 from an unresolved manual gate, got $code"
             exit 1
           fi
+
+      - name: A declared shell runs the commands, and they really ran
+        run: |
+          python -m runbook_dry_run tests/fixtures/shell-bash.md --base-dir . --execute
+          if [ ! -f shell-bash-marker.tmp ]; then
+            echo "the declared-shell commands never ran, so their clean report means nothing"
+            exit 1
+          fi
+          rm -f shell-bash-marker.tmp
+
+      - name: An unresolved shell exits 1 and runs nothing
+        run: |
+          set +e
+          python -m runbook_dry_run tests/fixtures/shell-unknown.md --base-dir . --execute
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then
+            echo "expected exit 1 from an unresolved shell, got $code"
+            exit 1
+          fi
+          if [ -f shell-unknown-marker.tmp ]; then
+            echo "a command ran under a shell that could not be resolved"
+            exit 1
+          fi
