@@ -128,6 +128,8 @@ class Runbook:
     # Fields added after 0.2 go below this line: Runbook is public API, and a field
     # inserted above shifts every positional argument written against 0.2.
     shell: str | None = None
+    shell_declarations: list[str] = field(default_factory=list)
+    shell_in_steps: list[int] = field(default_factory=list)
 
 
 def _first_backticked(value: str) -> str:
@@ -177,7 +179,10 @@ def parse(text: str) -> Runbook:
                 continue
             shell = SHELL_LINE.match(line)
             if shell:
-                book.shell = _first_backticked(shell.group(1))
+                declared = _first_backticked(shell.group(1))
+                book.shell_declarations.append(declared)
+                if book.shell is None:
+                    book.shell = declared
                 in_elements = False
                 continue
             if ELEMENTS_HEADING.match(line):
@@ -189,6 +194,12 @@ def parse(text: str) -> Runbook:
                     book.element_inventory.append(_first_backticked(bullet.group(1)))
                 elif line.strip():
                     in_elements = False
+            continue
+
+        if SHELL_LINE.match(line):
+            # Recorded so check() can refuse it out loud: dropped silently, it would
+            # leave a bash runbook running in the platform default.
+            book.shell_in_steps.append(current.number)
             continue
 
         directive = DIRECTIVE.match(line)
@@ -421,20 +432,28 @@ def check(
             )
         )
 
+    # Every SHELL_UNRESOLVED stops all execution: falling back to the platform
+    # default is the behaviour that produced three COMMAND_FAILED findings that
+    # were not defects (spec section 8).
     launcher = Launcher()
+    misplaced_shell = set(book.shell_in_steps)
     shell_problem: str | None = None
-    if book.shell is not None:
+    declared_shells = {_shell_of(d) or d.strip().casefold() for d in book.shell_declarations}
+    if len(declared_shells) > 1:
+        names = ", ".join(book.shell_declarations)
+        shell_problem = f"Shell: is declared more than once with different shells ({names})"
+    elif book.shell is not None:
         if _shell_of(book.shell) is None:
             # A name the tool does not know is a defect in the document, on any machine.
             shell_problem = _unknown_shell(book.shell)
-        elif execute and _has_commands_to_run(book):
+        elif execute and not misplaced_shell and _has_commands_to_run(book):
             # Whether the shell exists is a fact about THIS machine, which is not the
             # reader's; it is asked only when a command is about to run here.
-            resolved, problem = resolve_shell(book.shell)
-            if resolved is None:
+            resolved_shell, problem = resolve_shell(book.shell)
+            if resolved_shell is None:
                 shell_problem = problem
             else:
-                launcher = resolved
+                launcher = resolved_shell
     if shell_problem is not None:
         findings.append(
             Finding(
@@ -444,8 +463,8 @@ def check(
                 f"{shell_problem}, so no command in this document was executed",
             )
         )
-        # Falling back to the platform default is the behaviour that produced three
-        # COMMAND_FAILED findings that were not defects (spec section 8).
+        execute = False
+    if misplaced_shell:
         execute = False
 
     base = base_dir or (declared if declared else os.getcwd())
@@ -455,6 +474,17 @@ def check(
     step_numbers = {s.number for s in book.steps}
 
     for step in book.steps:
+        if step.number in misplaced_shell:
+            findings.append(
+                Finding(
+                    step.number,
+                    step.title,
+                    "SHELL_UNRESOLVED",
+                    "a Shell: line inside a step is not read; it belongs before the "
+                    "first step, so no command in this document was executed",
+                )
+            )
+
         if not step.failure_branch:
             findings.append(
                 Finding(

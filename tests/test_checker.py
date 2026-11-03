@@ -470,6 +470,35 @@ class UnresolvedShell(unittest.TestCase):
             "a command ran under a shell reported unavailable",
         )
 
+    def test_a_shell_line_inside_a_step_is_refused_at_that_step(self):
+        """Ignoring it would run bash commands in cmd.exe: the defect this directive removes."""
+        text = (
+            "# Runbook: misplaced\n\nWorking directory: `.`\n\n"
+            "## Step 1 - declare too late\nShell: `bash`\n"
+            "Run: `python -c \"open('shell-unknown-marker.tmp', 'w').close()\"`\n"
+            "On failure: stop.\n"
+        )
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertEqual({"SHELL_UNRESOLVED"}, codes_at(findings, 1))
+        self.assertEqual(1, len(findings), msg=f"expected exactly one: {findings}")
+        self.assertIn("inside a step", findings[0].detail)
+        self.assertFalse(os.path.exists(self.MARKERS[0]), "a command ran despite a misplaced Shell:")
+        self.assertEqual(
+            {"SHELL_UNRESOLVED"}, codes_at(check(parse(text), base_dir=REPO_ROOT), 1)
+        )
+
+    def test_two_different_shells_are_refused(self):
+        text = one_step("Shell: `bash`\nShell: `pwsh`", "Run: `exit 0`")
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertEqual({"SHELL_UNRESOLVED"}, codes_at(findings, 0))
+        self.assertEqual(1, len(findings), msg=f"expected exactly one: {findings}")
+        self.assertIn("more than once", findings[0].detail)
+
+    def test_two_names_for_the_same_shell_are_not_a_conflict(self):
+        text = one_step("Shell: `Git Bash`\nShell: `bash`", "Run: `[[ -n \"$BASH_VERSION\" ]]`")
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertEqual([], findings, msg=f"unexpected findings: {findings}")
+
     def test_without_execute_availability_is_never_checked(self):
         """The checking machine is not the reader's machine.
 
