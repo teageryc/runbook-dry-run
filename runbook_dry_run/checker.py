@@ -115,10 +115,14 @@ class Launcher:
     COMMAND_VARIABLE instead of as an argument: Windows re-parses a command line by
     MSVC rules and Git Bash's runtime by its own, so a backslash pair before a
     quote arrived halved. An environment variable is never re-parsed.
+
+    `encoding` is how the shell's output is decoded; None means the locale's.
+    Git Bash writes UTF-8, which the Windows ANSI code page cannot always decode.
     """
 
     argv: tuple[str, ...] = ()
     via_environment: bool = False
+    encoding: str | None = None
 
 
 @dataclass
@@ -335,7 +339,8 @@ def resolve_shell(declared: str) -> tuple[Launcher | None, str]:
             problem = "" if found else "bash is not on PATH"
         if found is None:
             return None, problem
-        return Launcher((found, "-c", f'eval "${COMMAND_VARIABLE}"'), via_environment=True), ""
+        argv = (found, "-c", f'eval "${COMMAND_VARIABLE}"')
+        return Launcher(argv, via_environment=True, encoding="utf-8"), ""
     if shell in ("pwsh", "powershell"):
         if shell == "powershell" and not windows:
             return None, "powershell (Windows PowerShell) exists only on Windows; declare pwsh"
@@ -389,6 +394,8 @@ def _run(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding=launcher.encoding,
+            errors="replace",
             **platform,
         )
     except OSError as exc:  # pragma: no cover - platform dependent

@@ -311,6 +311,13 @@ class ShellDirective(unittest.TestCase):
         findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
         self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 1))
 
+    def test_bash_output_is_read_as_utf_8(self):
+        """Git Bash writes UTF-8; decoded with the ANSI code page, the detail was lost."""
+        text = one_step("Shell: `bash`", r"Run: `printf '\344\270\201\n' >&2; exit 3`")
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 1))
+        self.assertIn("exited 3: 丁", findings[0].detail)
+
     @unittest.skipUnless(shutil.which("pwsh"), "pwsh is not installed")
     def test_a_declared_pwsh_runs_the_command_in_pwsh(self):
         findings = check(
