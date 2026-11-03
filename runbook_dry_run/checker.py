@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -231,6 +230,28 @@ def _resolve(path: str, base: str) -> str:
     return os.path.normpath(os.path.join(base, expanded))
 
 
+def _on_path(name: str) -> str | None:
+    """Find a program on PATH, and only on PATH.
+
+    shutil.which on Windows searches the current directory first, so a `git.bat`
+    planted wherever the checker is run would be chosen - and git, which shell
+    resolution executes, would run it. Only absolute PATH entries are searched.
+    """
+    if sys.platform == "win32":
+        extensions = [e for e in os.environ.get("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(";") if e]
+    else:
+        extensions = [""]
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        entry = entry.strip().strip('"')
+        if not entry or not os.path.isabs(entry):
+            continue
+        for extension in extensions:
+            candidate = os.path.join(entry, name + extension)
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return candidate
+    return None
+
+
 def _git_bash() -> tuple[str | None, str]:
     """Find Git Bash through git's own installation, never through PATH.
 
@@ -239,7 +260,7 @@ def _git_bash() -> tuple[str | None, str]:
     third shell, chosen silently. git's exec path sits a few levels below the
     installation's bin/bash.exe, which is what "Git Bash" means.
     """
-    git = shutil.which("git")
+    git = _on_path("git")
     if git is None:
         return None, "Git Bash is looked for through git's installation, and git is not on PATH"
     try:
@@ -285,7 +306,7 @@ def resolve_shell(declared: str) -> tuple[Launcher | None, str]:
         if windows:
             found, problem = _git_bash()
         else:
-            found = shutil.which("bash")
+            found = _on_path("bash")
             problem = "" if found else "bash is not on PATH"
         if found is None:
             return None, problem
@@ -293,7 +314,7 @@ def resolve_shell(declared: str) -> tuple[Launcher | None, str]:
     if shell in ("pwsh", "powershell"):
         if shell == "powershell" and not windows:
             return None, "powershell (Windows PowerShell) exists only on Windows; declare pwsh"
-        found = shutil.which(shell)
+        found = _on_path(shell)
         if found is None:
             return None, f"{shell} is not on PATH"
         return Launcher((found, *POWERSHELL_FLAGS)), ""

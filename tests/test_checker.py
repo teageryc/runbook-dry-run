@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -347,7 +348,7 @@ class ShellResolution(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == "win32", "the Git Bash lookup is Windows-only")
     def test_windows_bash_without_git_is_unresolved(self):
-        with mock.patch("runbook_dry_run.checker.shutil.which", return_value=None):
+        with mock.patch("runbook_dry_run.checker._on_path", return_value=None):
             launcher, reason = resolve_shell("bash")
         self.assertIsNone(launcher)
         self.assertIn("git", reason)
@@ -360,6 +361,63 @@ class ShellResolution(unittest.TestCase):
     def test_cmd_and_powershell_are_refused_elsewhere(self):
         self.assertIsNone(resolve_shell("cmd")[0])
         self.assertIsNone(resolve_shell("powershell")[0])
+
+
+class ProgramLookup(unittest.TestCase):
+    """Windows searches the current directory before PATH.
+
+    A program planted where the checker happens to be run must never be chosen,
+    and for git - which resolution executes - never run.
+    """
+
+    def _resolve_in(self, planted: str, name: str):
+        """Resolve from inside `planted`, with Windows' default search order.
+
+        NoDefaultCurrentDirectoryInExePath turns the current-directory search off,
+        and some launchers set it; with it present this test passes on the old
+        code too. Windows' default is to leave it unset, so the test removes it.
+        """
+        previous = os.getcwd()
+        os.chdir(planted)
+        try:
+            with mock.patch.dict(os.environ):
+                os.environ.pop("NoDefaultCurrentDirectoryInExePath", None)
+                return resolve_shell(name)
+        finally:
+            os.chdir(previous)
+
+    def _inside(self, path: str, directory: str) -> bool:
+        """True for a path in `directory`, and for any relative path.
+
+        shutil.which returns `.\\pwsh.BAT` for a current-directory hit; resolved
+        after the test has left that directory, it would point somewhere else and
+        pass. A relative program path is a current-directory hit by definition.
+        """
+        if not os.path.isabs(path):
+            return True
+        return os.path.realpath(path).casefold().startswith(
+            os.path.realpath(directory).casefold()
+        )
+
+    @unittest.skipUnless(sys.platform == "win32", "only Windows searches the current directory first")
+    def test_a_git_planted_in_the_current_directory_is_never_run(self):
+        with tempfile.TemporaryDirectory() as planted:
+            marker = os.path.join(planted, "planted-git-ran.tmp")
+            with open(os.path.join(planted, "git.bat"), "w", encoding="ascii") as handle:
+                handle.write("@echo off\r\necho ran> planted-git-ran.tmp\r\necho %CD%\r\n")
+            launcher, _ = self._resolve_in(planted, "bash")
+            self.assertFalse(os.path.exists(marker), "a git planted in the current directory ran")
+            self.assertIsNotNone(launcher)
+            self.assertFalse(self._inside(launcher.argv[0], planted), launcher.argv[0])
+
+    @unittest.skipUnless(sys.platform == "win32", "only Windows searches the current directory first")
+    def test_a_pwsh_planted_in_the_current_directory_is_not_chosen(self):
+        with tempfile.TemporaryDirectory() as planted:
+            with open(os.path.join(planted, "pwsh.bat"), "w", encoding="ascii") as handle:
+                handle.write("@echo off\r\nexit /b 0\r\n")
+            launcher, _ = self._resolve_in(planted, "pwsh")
+            if launcher is not None:
+                self.assertFalse(self._inside(launcher.argv[0], planted), launcher.argv[0])
 
 
 class UnresolvedShell(unittest.TestCase):
