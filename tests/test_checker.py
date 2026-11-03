@@ -16,7 +16,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIXTURES = os.path.join(REPO_ROOT, "tests", "fixtures")
 sys.path.insert(0, REPO_ROOT)
 
-from runbook_dry_run.checker import check, has_errors, parse  # noqa: E402
+from runbook_dry_run.checker import check, has_errors, parse, resolve_shell  # noqa: E402
 
 
 def run_fixture(name: str, execute: bool = False):
@@ -240,6 +240,45 @@ class ShellDirective(unittest.TestCase):
         self.assertEqual("Git Bash", book.shell)
         with open(os.path.join(FIXTURES, "good.md"), encoding="utf-8") as handle:
             self.assertIsNone(parse(handle.read()).shell)
+
+
+class ShellResolution(unittest.TestCase):
+    def test_git_bash_is_an_alias_and_case_does_not_matter(self):
+        alias, _ = resolve_shell("Git Bash")
+        self.assertIsNotNone(alias)
+        self.assertEqual(alias, resolve_shell("BASH")[0])
+
+    def test_an_unknown_name_is_refused_with_the_known_names(self):
+        launcher, reason = resolve_shell("fish")
+        self.assertIsNone(launcher)
+        self.assertIn("'fish'", reason)
+        self.assertIn("Git Bash", reason)
+
+    @unittest.skipUnless(sys.platform == "win32", "the Git Bash lookup is Windows-only")
+    def test_windows_bash_comes_from_git_never_from_path(self):
+        """On the machine this was built on, PATH answers bash with the WSL launcher."""
+        launcher, _ = resolve_shell("bash")
+        self.assertIsNotNone(launcher)
+        exe = launcher[0].casefold()
+        self.assertTrue(exe.endswith(os.path.join("bin", "bash.exe")), exe)
+        self.assertNotIn("windowsapps", exe)
+        self.assertNotIn("system32", exe)
+
+    @unittest.skipUnless(sys.platform == "win32", "the Git Bash lookup is Windows-only")
+    def test_windows_bash_without_git_is_unresolved(self):
+        with mock.patch("runbook_dry_run.checker.shutil.which", return_value=None):
+            launcher, reason = resolve_shell("bash")
+        self.assertIsNone(launcher)
+        self.assertIn("git", reason)
+
+    @unittest.skipUnless(sys.platform == "win32", "cmd exists only on Windows")
+    def test_cmd_on_windows_is_the_platform_default(self):
+        self.assertEqual(((), ""), resolve_shell("cmd"))
+
+    @unittest.skipIf(sys.platform == "win32", "cmd and powershell exist on Windows")
+    def test_cmd_and_powershell_are_refused_elsewhere(self):
+        self.assertIsNone(resolve_shell("cmd")[0])
+        self.assertIsNone(resolve_shell("powershell")[0])
 
 
 if __name__ == "__main__":

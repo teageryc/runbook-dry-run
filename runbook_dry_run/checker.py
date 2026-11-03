@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from typing import Iterable, Sequence
 
@@ -28,6 +30,17 @@ SHELL_LINE = re.compile(r"^Shell\s*:\s*(.*)$")
 ELEMENTS_HEADING = re.compile(r"^Elements\s*:\s*$")
 BULLET = re.compile(r"^[-*]\s+(.*?)\s*$")
 BACKTICKED = re.compile(r"`([^`]+)`")
+
+# Accepted `Shell:` names, case-insensitive, mapped to the shell actually resolved.
+SHELL_NAMES = {
+    "bash": "bash",
+    "git bash": "bash",
+    "pwsh": "pwsh",
+    "powershell": "powershell",
+    "cmd": "cmd",
+}
+KNOWN_SHELLS = "bash, Git Bash, pwsh, powershell, cmd"
+POWERSHELL_FLAGS = ("-NoProfile", "-NonInteractive", "-Command")
 
 # Documented in docs/specs/2026-09-12-runbook-dry-run-design.md, section 4.
 FINDING_CODES = {
@@ -195,6 +208,62 @@ def _resolve(path: str, base: str) -> str:
     if os.path.isabs(expanded):
         return expanded
     return os.path.normpath(os.path.join(base, expanded))
+
+
+def _git_bash() -> tuple[tuple[str, ...] | None, str]:
+    """Find Git Bash through git's own installation, never through PATH.
+
+    On Windows, PATH answers `bash` with the WSL launcher (System32 or the
+    WindowsApps alias), which runs the command under Linux with Linux paths: a
+    third shell, chosen silently. git's exec path sits a few levels below the
+    installation's bin/bash.exe, which is what "Git Bash" means.
+    """
+    git = shutil.which("git")
+    if git is None:
+        return None, "Git Bash is looked for through git's installation, and git is not on PATH"
+    try:
+        probe = subprocess.run(
+            [git, "--exec-path"], capture_output=True, text=True, timeout=30
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, f"git --exec-path did not answer: {exc}"
+    start = probe.stdout.strip()
+    if probe.returncode != 0 or not start:
+        return None, f"git --exec-path exited {probe.returncode}"
+    directory = os.path.normpath(start)
+    for _ in range(4):
+        candidate = os.path.join(directory, "bin", "bash.exe")
+        if os.path.isfile(candidate):
+            return (candidate, "-c"), ""
+        directory = os.path.dirname(directory)
+    return None, f"no bin/bash.exe in the four directories above git's exec path {start}"
+
+
+def resolve_shell(declared: str) -> tuple[tuple[str, ...] | None, str]:
+    """Turn a `Shell:` name into the argv prefix that runs a command in that shell.
+
+    Returns (prefix, "") when the shell is usable and (None, reason) when it is
+    not. An empty prefix means the platform default through `shell=True`, which
+    on Windows is cmd.exe.
+    """
+    name = declared.strip()
+    key = SHELL_NAMES.get(name.casefold())
+    if key is None:
+        return None, f"{name!r} is not a shell this tool knows ({KNOWN_SHELLS})"
+    windows = sys.platform == "win32"
+    if key == "cmd":
+        return ((), "") if windows else (None, "cmd exists only on Windows")
+    if key == "bash":
+        if windows:
+            return _git_bash()
+        found = shutil.which("bash")
+        return ((found, "-c"), "") if found else (None, "bash is not on PATH")
+    if key == "powershell" and not windows:
+        return None, "powershell (Windows PowerShell) exists only on Windows; declare pwsh"
+    found = shutil.which(key)
+    if found is None:
+        return None, f"{key} is not on PATH"
+    return (found, *POWERSHELL_FLAGS), ""
 
 
 def _run(command: str, cwd: str, timeout: float) -> tuple[int, str]:
