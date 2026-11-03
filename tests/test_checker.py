@@ -29,6 +29,16 @@ def codes_at(findings, step: int) -> set[str]:
     return {f.code for f in findings if f.step == step}
 
 
+def one_step(shell_line: str, directive: str) -> str:
+    return (
+        "# Runbook: one step\n\nWorking directory: `.`\n"
+        f"{shell_line}\n\n"
+        "## Step 1 - the command under test\n"
+        f"{directive}\n"
+        "On failure: stop.\n"
+    )
+
+
 class GoodRunbook(unittest.TestCase):
     def test_a_followable_runbook_reports_nothing(self):
         findings = run_fixture("good.md", execute=True)
@@ -240,6 +250,45 @@ class ShellDirective(unittest.TestCase):
         self.assertEqual("Git Bash", book.shell)
         with open(os.path.join(FIXTURES, "good.md"), encoding="utf-8") as handle:
             self.assertIsNone(parse(handle.read()).shell)
+
+    PWSH_PROBE = (
+        "Run (expect-fail: 7): "
+        "`if ($PSVersionTable -and (\"a b\" -eq 'a b')) { exit 7 }`"
+    )
+
+    def test_a_declared_bash_runs_every_command_in_bash(self):
+        findings = run_fixture("shell-bash.md", execute=True)
+        self.assertEqual([], findings, msg=f"unexpected findings: {findings}")
+        self.assertTrue(
+            os.path.exists(self.MARKER),
+            "the commands never ran, so a clean report means nothing",
+        )
+
+    def test_the_same_commands_fail_without_the_declaration(self):
+        with open(os.path.join(FIXTURES, "shell-bash.md"), encoding="utf-8") as handle:
+            text = handle.read().replace("Shell: `Git Bash`\n", "")
+        book = parse(text)
+        self.assertIsNone(book.shell, "the control must really be undeclared")
+        findings = check(book, base_dir=REPO_ROOT, execute=True)
+        self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 1))
+
+    def test_a_mangled_quote_would_be_caught(self):
+        """The round-trip step can fail: the same comparison with one space altered."""
+        text = one_step("Shell: `bash`", "Run: `[ \"$(printf '%s' \"a b\")\" = \"a  b\" ]`")
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 1))
+
+    @unittest.skipUnless(shutil.which("pwsh"), "pwsh is not installed")
+    def test_a_declared_pwsh_runs_the_command_in_pwsh(self):
+        findings = check(
+            parse(one_step("Shell: `pwsh`", self.PWSH_PROBE)), base_dir=REPO_ROOT, execute=True
+        )
+        self.assertEqual([], findings, msg=f"unexpected findings: {findings}")
+
+    @unittest.skipUnless(shutil.which("pwsh"), "pwsh is not installed")
+    def test_the_pwsh_probe_fails_without_the_declaration(self):
+        findings = check(parse(one_step("", self.PWSH_PROBE)), base_dir=REPO_ROOT, execute=True)
+        self.assertEqual({"EXPECTED_FAILURE_NOT_OBSERVED"}, codes_at(findings, 1))
 
 
 class ShellResolution(unittest.TestCase):

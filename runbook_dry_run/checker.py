@@ -266,17 +266,22 @@ def resolve_shell(declared: str) -> tuple[tuple[str, ...] | None, str]:
     return (found, *POWERSHELL_FLAGS), ""
 
 
-def _run(command: str, cwd: str, timeout: float) -> tuple[int, str]:
+def _run(
+    command: str, cwd: str, timeout: float, launcher: tuple[str, ...] = ()
+) -> tuple[int, str]:
     """Run one command and read its exit code UNPIPED.
 
     `returncode` is read off the completed process itself. Piping the command into
     anything - a pager, a formatter, `tee` - makes the pipeline's status the one
     you see, and a failing step then reports success.
+
+    With a launcher, the command is handed to the declared shell as one argument;
+    without one, the platform default runs it, exactly as before v0.3.
     """
     try:
         proc = subprocess.run(
-            command,
-            shell=True,
+            [*launcher, command] if launcher else command,
+            shell=not launcher,
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -339,6 +344,12 @@ def check(
                 "no 'Working directory:' line, so no path in this document can be resolved",
             )
         )
+
+    launcher: tuple[str, ...] = ()
+    if book.shell is not None:
+        resolved, problem = resolve_shell(book.shell)
+        if resolved is not None:
+            launcher = resolved
 
     base = base_dir or (declared if declared else os.getcwd())
     base = os.path.abspath(os.path.expanduser(os.path.expandvars(base)))
@@ -417,7 +428,7 @@ def check(
             continue
 
         for command in step.commands:
-            code, detail = _run(command, base, timeout)
+            code, detail = _run(command, base, timeout, launcher)
             if code != 0:
                 suffix = f": {detail}" if detail else ""
                 findings.append(
@@ -430,7 +441,7 @@ def check(
                 )
 
         for expected in step.expect_fail_commands:
-            code, detail = _run(expected.command, base, timeout)
+            code, detail = _run(expected.command, base, timeout, launcher)
             if expected.exit_code is None:
                 satisfied = code != 0
                 declared = "a non-zero exit"

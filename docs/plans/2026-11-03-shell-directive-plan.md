@@ -611,3 +611,7 @@ python -m runbook_dry_run "G:/Business/AI/Learnings/Publish-runbook-dry-run-Proc
 
 - Checkpoint capture in `G:\Business\AI` once lane ai-0a's KL-0236..0239 commit has landed: re-read the Next-ID counter, one entry (KL-0240 or later) resolving KL-0122 and recording Yan's 2026-11-03 picks; announce exact paths to live lanes before staging.
 - Ask Yan whether and when to publish the repository (no remote-tracking branch exists locally; `gh` as `teagerca-prog` cannot see `teageryc/runbook-dry-run`).
+
+## Deviations during execution
+
+> **Corrected 2026-11-03 (Task 3)** — the step-1 probe in `tests/fixtures/shell-bash.md` is `[[ -n "$BASH_VERSION" ]]`, not the `[ -n "$BASH_VERSION" ]` written in Task 3 above. The single-bracket form does not discriminate: when the test runner is launched from Git Bash, `PATH` contains `G:\Apps\Git\usr\bin\[.exe` (coreutils `test`), so `cmd.exe` runs it with the literal string `"$BASH_VERSION"` and exits 0 — the undeclared control then passed for the wrong reason and its test failed. The "Measured before planning" bullet that the undeclared probe exits 1 was true only for a PowerShell-launched Python. `[[` is a bash keyword with no external binary (`[[.exe` does not exist), so it exits 1 under cmd from either launch context and 0 under bash.
