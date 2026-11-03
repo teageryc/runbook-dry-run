@@ -20,7 +20,7 @@ KL-0122 (open since 2026-09-12, `G:\Business\AI\docs\knowledge\KNOWLEDGE_LEDGER.
 
 ## Measured before planning (2026-11-03, this machine)
 
-From a PowerShell-launched Python (`probe_shells.py` in the session scratchpad):
+From a PowerShell-launched Python (`G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\probe_shells.py`, copied there from the session scratchpad after the code review):
 
 - `git --exec-path` = `G:/Apps/Git/ucrt64/libexec/git-core`; walking up, `bin\bash.exe` first exists at level 3 = `G:\Apps\Git\bin\bash.exe` (levels 0–2 absent).
 - `shutil.which("bash")` = `C:\Users\cheny\AppData\Local\Microsoft\WindowsApps\bash.EXE` — the WSL launcher. This is why PATH is never consulted.
@@ -30,11 +30,11 @@ From a PowerShell-launched Python (`probe_shells.py` in the session scratchpad):
 
 ## Files
 
-- Modify `runbook_dry_run\checker.py` — `Shell:` parsing, `resolve_shell()`, `_git_bash()`, `_run(launcher=...)`, `SHELL_UNRESOLVED` in `check()`.
-- Modify `tests\test_checker.py` — classes `ShellDirective`, `ShellResolution`, `UnresolvedShell` (15 cases → 35 total).
-- Create `tests\fixtures\shell-bash.md`, `tests\fixtures\shell-unknown.md`.
-- Modify `.github\workflows\ci.yml` (two smoke steps), `README.md`, `LIMITS.md`, `CHANGELOG.md`, `runbook_dry_run\__init__.py`.
-- Create `docs\plans\2026-11-03-shell-directive-plan.md` (this plan's mirror).
+- Modify `G:\Projects\runbook-dry-run\runbook_dry_run\checker.py` — `Shell:` parsing, `resolve_shell()`, `_git_bash()`, `_run(launcher=...)`, `SHELL_UNRESOLVED` in `check()`.
+- Modify `G:\Projects\runbook-dry-run\tests\test_checker.py` — classes `ShellDirective`, `ShellResolution`, `UnresolvedShell` (15 cases → 35 total; 48 after the review round below).
+- Create `G:\Projects\runbook-dry-run\tests\fixtures\shell-bash.md`, `G:\Projects\runbook-dry-run\tests\fixtures\shell-unknown.md`.
+- Modify `G:\Projects\runbook-dry-run\.github\workflows\ci.yml` (two smoke steps), `G:\Projects\runbook-dry-run\README.md`, `G:\Projects\runbook-dry-run\LIMITS.md`, `G:\Projects\runbook-dry-run\CHANGELOG.md`, `G:\Projects\runbook-dry-run\runbook_dry_run\__init__.py`.
+- Create `G:\Projects\runbook-dry-run\docs\plans\2026-11-03-shell-directive-plan.md` (this plan's mirror).
 
 All paths relative to `G:\Projects\runbook-dry-run`. Commands below run in Git Bash from that directory. Every commit uses `git commit -m "<msg>" -- <paths>` and ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Exit codes are read unpiped (`cmd; echo "exit=$?"`).
 
@@ -614,6 +614,29 @@ python -m runbook_dry_run "G:/Business/AI/Learnings/Publish-runbook-dry-run-Proc
 
 ## Deviations during execution
 
-> **Corrected 2026-11-03 (Task 3)** — the step-1 probe in `tests/fixtures/shell-bash.md` is `[[ -n "$BASH_VERSION" ]]`, not the `[ -n "$BASH_VERSION" ]` written in Task 3 above. The single-bracket form does not discriminate: when the test runner is launched from Git Bash, `PATH` contains `G:\Apps\Git\usr\bin\[.exe` (coreutils `test`), so `cmd.exe` runs it with the literal string `"$BASH_VERSION"` and exits 0 — the undeclared control then passed for the wrong reason and its test failed. The "Measured before planning" bullet that the undeclared probe exits 1 was true only for a PowerShell-launched Python. `[[` is a bash keyword with no external binary (`[[.exe` does not exist), so it exits 1 under cmd from either launch context and 0 under bash.
+> **Corrected 2026-11-03 (Task 3)** — the step-1 probe in `G:\Projects\runbook-dry-run\tests\fixtures\shell-bash.md` is `[[ -n "$BASH_VERSION" ]]`, not the `[ -n "$BASH_VERSION" ]` written in Task 3 above. The single-bracket form does not discriminate: when the test runner is launched from Git Bash, `PATH` contains `G:\Apps\Git\usr\bin\[.exe` (coreutils `test`), so `cmd.exe` runs it with the literal string `"$BASH_VERSION"` and exits 0 — the undeclared control then passed for the wrong reason and its test failed. The "Measured before planning" bullet that the undeclared probe exits 1 was true only for a PowerShell-launched Python. `[[` is a bash keyword with no external binary (`[[.exe` does not exist), so it exits 1 under cmd from either launch context and 0 under bash.
 
 > **Corrected 2026-11-03 (Task 5)** — Task 5 says PyYAML is not available; it is (`python -c "import yaml"` exits 0). The workflow was therefore validated by parsing it with `yaml.safe_load` and listing each job's steps, not by eye.
+
+## Code review round (Task 9)
+
+The `code-review` skill reported fifteen findings over `77fa3d4..6f35c5b`. Two changed the approved design and went to Yan, who picked the recommended option for both on 2026-11-03; the rest were fixed test-first, each commit red before green. Spec section 9 records the contract changes.
+
+| # | Finding | Disposition | Commit |
+| --- | --- | --- | --- |
+| 1 | `--timeout` could not stop a command under Git Bash (or a `cmd.exe` grandchild) | Job Object on Windows, process group on POSIX; `taskkill /T` and a parent-id walk measured and rejected | `9221eb9` |
+| 2 | `shutil.which` searched the current directory; a planted `git.bat` ran | `_on_path()`: absolute `PATH` entries only | `d76e769` |
+| 3 | A backslash pair before a quote reached bash halved | Command passed in `RUNBOOK_DRY_RUN_COMMAND` | `cd230b2` |
+| 4 | UTF-8 output crashed the reader thread under cp1252 | Bash decoded as UTF-8; `errors="replace"` everywhere | `40a0255` |
+| 5 | A `Shell:` line inside a step, or a second one, was silently ignored | Yan's pick: refused as `SHELL_UNRESOLVED` | `225cb3c` |
+| 6 | The pwsh `; exit $LASTEXITCODE` advice was wrong for cmdlets | Measured; spec §8 corrected, LIMITS rewritten | docs commit |
+| 7 | `Runbook.shell` inserted mid-dataclass broke positional construction | Field appended after the 0.2 fields | `f2918e8` |
+| 8 | `SHELL_UNRESOLVED` without `--execute` failed CI on another OS | Yan's pick: unknown name always; availability only under `--execute` | `02799fc` |
+| 9 | Bash-less git first on `PATH`; level count in the message | Message fixed (`cd230b2`); the bash-less git recorded in LIMITS | docs commit |
+| 10 | `SHELL_UNRESOLVED` for documents with nothing to run | Folded into #8: asked only when a command would run | `02799fc` |
+| 11 | README claimed every test asserts a code and a step | Audited (26 of 48 assert a code); two `NO_STEPS` tests now assert step 0; sentence reworded | docs commit |
+| 12, 13 | Fall-through to PowerShell flags; `KNOWN_SHELLS` a hand copy | One table, one branch per shell | `cd230b2` |
+| 14 | This plan cited relative and scratchpad paths | Absolute paths; probes archived below | docs commit |
+| 15 | No tests for timeouts, cmd execution, misplaced lines | Added with #1, #5 and #8 | as above |
+
+**Evidence** (all under `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\`): `probe_shells.py` (the pre-plan measurements), `accept-declared.txt` and `accept-original.txt` (Task 8 acceptance and its control), `backslash_red.py` (finding 3 reproduced, then fixed), `run_timing.py`, `tree_kill_debug.py`, `taskkill_variants.py`, `msys_tree.py`, `ctypes_tree_kill.py` and `job_kill.py` (finding 1: why taskkill and the parent walk fail, and the Job Object that works), `pwsh_exit_codes.py` (finding 6), `audit_test_claims.py` (finding 11), `make_declared_copy.py` (builds the Task 8 copy). The reviewer's own probes are in `review\`; they call the pre-fix API at `6f35c5b` (`resolve_shell` then returned a tuple) and do not run against later commits.

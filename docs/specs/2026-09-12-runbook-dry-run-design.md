@@ -1,6 +1,6 @@
 # Design — runbook-dry-run | 设计 — 运行手册预演
 
-> **Dated** 2026-09-12 · **Status** accepted · **Supersedes** nothing · **Amended** 2026-09-12 for v0.2, see §7 · 2026-11-03 for v0.3, see §8
+> **Dated** 2026-09-12 · **Status** accepted · **Supersedes** nothing · **Amended** 2026-09-12 for v0.2, see §7 · 2026-11-03 for v0.3, see §8 and §9
 > This document is the contract. The code is one implementation of it, and where the two disagree, this file is the defect report.
 
 ---
@@ -57,6 +57,8 @@ Every directive is optional except that each step needs an `On failure:` line. A
 
 `Shell: <name>` declares the shell every command in the document is written for, and `--execute` runs them in it. Names are case-insensitive; `Git Bash` is an alias for `bash`. On Windows, `bash` is found through git's own installation and never through `PATH`, which can resolve to the WSL launcher and run the commands under a different operating system. A document with no `Shell:` line runs its commands in the platform default (`cmd.exe` on Windows, `/bin/sh` elsewhere), exactly as before v0.3.
 
+The line belongs before the first step: a `Shell:` line inside a step, or two lines naming different shells, is refused rather than ignored. A name the tool does not know is reported on every run; whether the named shell exists on this machine is asked only under `--execute`, and only when a command would actually run (§9).
+
 ### 4. Finding codes
 
 A finding is always anchored to a step number. `step 0` means the defect belongs to the document rather than to any one step.
@@ -73,7 +75,7 @@ A finding is always anchored to a step number. `step 0` means the defect belongs
 | `EXPECTED_FAILURE_NOT_OBSERVED` | error | a `Run (expect-fail):` command exited `0`, or exited a code other than the one the step declared |
 | `MANUAL_GATE_UNRESOLVED` | error | an `After manual step:` names no step number, or one the document does not contain, or one that does not precede this step |
 | `COMMAND_DEFERRED_MANUAL_GATE` | info | a step waits on a manual step, so its commands were not executed under `--execute` |
-| `SHELL_UNRESOLVED` | error | the `Shell:` line names a shell this tool does not know, or one this machine does not have; no command in the document is then executed, with or without `--execute` |
+| `SHELL_UNRESOLVED` | error | on every run: the `Shell:` line names a shell this tool does not know, appears inside a step (reported at that step), or is one of two lines naming different shells; under `--execute`, when a command would run: the named shell is not on this machine. No command in the document is then executed |
 
 Exit code is `1` if any finding has severity `error`, otherwise `0`.
 
@@ -121,11 +123,31 @@ The first procedure ever checked with this tool was the procedure that publishes
 
 **It fires with or without `--execute`.** A shell the machine lacks strands the reader on the day whether or not this check ran the commands, and the path checks already report environment facts without executing anything.
 
+> **Corrected 2026-11-03 (§9)** — superseded by Yan's ruling on the v0.3 code review: only a name the tool does not know fires on every run. Whether the shell exists is asked only under `--execute`, when a command would run, because the checking machine is not the reader's machine.
+
 **Git Bash is found through git, never through `PATH`.** On Windows, `PATH` can resolve `bash` to `C:\Windows\System32\bash.exe` or the `WindowsApps` alias, both of which are the WSL launcher: the commands would run under Linux, with Linux paths — a third shell, chosen silently. The tool walks up from `git --exec-path` to the installation's `bin\bash.exe` instead, and reports `SHELL_UNRESOLVED` if git is absent.
 
 **A document that declares no shell is unchanged.** It runs in the platform default and produces no new finding. A finding that fired on every existing runbook would be the noise §6 names as a sign this design is wrong.
 
 **What remains a limit, not a feature.** The declared shell is the one the commands run in, not proof that the reader's own terminal is that shell. Under PowerShell, `-Command` collapses any failure of the final statement to exit `1` — measured 2026-11-03 on PowerShell 7, even a native command's own code (`cmd /c exit 7` arrives as `1`) — and a failure followed by a success arrives as `0`; only an explicit `exit N` survives. A `Run (expect-fail: <code>):` step under `Shell: pwsh` therefore needs its command to end in `; exit $LASTEXITCODE`. Both are recorded in `LIMITS.md`.
+
+> **Corrected 2026-11-03 (§9)** — the `; exit $LASTEXITCODE` ending is right for a native program only. `$LASTEXITCODE` does not track cmdlets, so after a failing cmdlet the ending turns the failure into `0`, or into an earlier native program's code. The measurements are in §9.
+
+### 9. Amendment, 2026-11-03 — what the code review changed
+
+A code review of v0.3, run before the release rather than after it, reported fifteen findings. Every one was reproduced or read against the code before it was acted on. This section records the ones that changed the contract or the reasoning above; the rest are in the changelog.
+
+**An unknown name and a missing shell are different facts** (Yan's ruling). A name the tool does not know is a defect in the document on any machine, so it is reported on every run. Whether the shell exists is a fact about the machine running the check, which is not the reader's: a Windows runbook declaring `cmd` must not fail a path-only CI run on Linux. That question is asked only under `--execute`, and only when a command would actually run — gated and destructive commands never do. A path-only run therefore starts no process at all.
+
+**A misplaced or conflicting `Shell:` line is refused, not ignored** (Yan's ruling). Dropped silently, a `Shell:` line written inside a step left a bash runbook running in `cmd.exe` and producing the same false `COMMAND_FAILED` findings this directive exists to remove. It is now `SHELL_UNRESOLVED` at the step where it appears; two lines naming different shells are `SHELL_UNRESOLVED` at the document; and nothing executes. Two names for one shell (`Git Bash`, `bash`) are not a conflict.
+
+**The command reaches bash in an environment variable.** Passed as an argument, the command crossed two parsers: Windows builds the command line by MSVC rules and Git Bash's runtime splits it by its own, so a backslash pair before a quote arrived halved — `x='a\\'` measured length 2 instead of 3. Bash now receives a fixed argument, `eval "$RUNBOOK_DRY_RUN_COMMAND"`, and the command travels in that variable, which nothing re-parses.
+
+**A timeout stops the whole command, not only its first process.** Measured before the fix: a 2-second timeout took 10.3 seconds under `Shell: Git Bash`, and so did a `cmd.exe` command whose program was a grandchild — a pre-existing defect that Git Bash's launcher stub made universal. Two obvious fixes were measured and rejected: `taskkill /T` cannot start while the output pipes are being read (12 to 16 seconds measured), and a walk by parent process id never finds the program, because an MSYS fork that has exited breaks the parent chain. On Windows the command now starts suspended inside a Job Object that is terminated on timeout; on POSIX it leads its own process group.
+
+**The PowerShell ending applies to native programs only.** Measured through the tool's own launcher on PowerShell 7: `cmd /c exit 7` arrives as `1`, and with `; exit $LASTEXITCODE` as `7`; a failing `Get-Item` arrives as `1`, but with the ending as `0`, and after an earlier `cmd /c exit 5` as `5`. A failing cmdlet is therefore declared `Run (expect-fail: 1):` with no ending.
+
+**Shell resolution never searches the current directory.** `shutil.which` on Windows looks in the current directory first, so a `git.bat` planted where the checker ran was executed during resolution. Only absolute `PATH` entries are searched now. The regression test removes `NoDefaultCurrentDirectoryInExePath`, which some launchers set and Windows leaves unset; with it present, the test also passed on the vulnerable code.
 
 
 ---
@@ -182,6 +204,8 @@ On failure: <本步骤失败时读者该做什么>
 
 `Shell: <名称>` 声明文档里每一条命令是为哪个 shell 写的，`--execute` 就在那个 shell 里运行它们。名称不区分大小写；`Git Bash` 是 `bash` 的别名。在 Windows 上，`bash` 通过 git 自己的安装目录找到，绝不通过 `PATH`——`PATH` 可能解析到 WSL 启动器，把命令放到另一个操作系统里去跑。没有 `Shell:` 行的文档，命令在平台默认 shell 里运行（Windows 上是 `cmd.exe`，其他平台是 `/bin/sh`），与 v0.3 之前完全一样。
 
+这一行应写在第一个步骤之前：写在某个步骤里的 `Shell:` 行，或者点名不同 shell 的两行，都会被拒绝，而不是被忽略。本工具不认识的名称，每次运行都会报；点名的 shell 在这台机器上是否存在，只在 `--execute` 下、并且确实有命令要运行时才会询问（第九节）。
+
 ### 四、发现代码
 
 发现永远锚定到步骤编号。`step 0` 表示缺陷属于文档本身，而不属于任何单一步骤。
@@ -198,7 +222,7 @@ On failure: <本步骤失败时读者该做什么>
 | `EXPECTED_FAILURE_NOT_OBSERVED` | error | 某条 `Run (expect-fail):` 命令退出码为 `0`，或退出码不是步骤声明的那一个 |
 | `MANUAL_GATE_UNRESOLVED` | error | 某个 `After manual step:` 没有点出步骤编号，或点的步骤文档里没有，或点的步骤不在本步骤之前 |
 | `COMMAND_DEFERRED_MANUAL_GATE` | info | 某个步骤在等一个手工步骤，因而在 `--execute` 下它的命令未被执行 |
-| `SHELL_UNRESOLVED` | error | `Shell:` 行点名的 shell 本工具不认识，或这台机器上没有；此时文档里任何命令都不执行，加不加 `--execute` 都一样 |
+| `SHELL_UNRESOLVED` | error | 每次运行都会报：`Shell:` 行点名的 shell 本工具不认识、写在了某个步骤里（报在那一步），或者是点名不同 shell 的两行之一；在 `--execute` 下且有命令要运行时：点名的 shell 不在这台机器上。此时文档里任何命令都不执行 |
 
 只要有任何一个发现的严重度是 `error`，退出码为 `1`，否则为 `0`。
 
@@ -246,8 +270,28 @@ On failure: <本步骤失败时读者该做什么>
 
 **加不加 `--execute` 都会报。** 机器上缺这个 shell，当天就会把读者困住，不管本检查有没有运行那些命令；路径检查本来就在不执行任何东西的情况下报告环境事实。
 
+> **Corrected 2026-11-03 (第九节)** —— 已被 Yan 对 v0.3 代码审查的裁决取代：只有本工具不认识的名称才会在每次运行时报出。shell 是否存在，只在 `--execute` 下、有命令要运行时才询问，因为做检查的机器不是读者的机器。
+
 **Git Bash 通过 git 找，绝不通过 `PATH`。** 在 Windows 上，`PATH` 可能把 `bash` 解析到 `C:\Windows\System32\bash.exe` 或 `WindowsApps` 别名，两者都是 WSL 启动器：命令会在 Linux 里、用 Linux 的路径运行——一个被悄悄选中的第三个 shell。工具改为从 `git --exec-path` 往上找到安装目录下的 `bin\bash.exe`，没有 git 就报 `SHELL_UNRESOLVED`。
 
 **没有声明 shell 的文档保持不变。** 它在平台默认 shell 里运行，不产生新的发现。一个对每一份现有手册都触发的发现，正是第六节列为「这个设计是错的」迹象的那种噪音。
 
 **仍然是限制、而不是功能的部分。** 声明的 shell 是命令被运行的那个 shell，并不证明读者自己的终端就是那个 shell。在 PowerShell 下，`-Command` 会把最后一条语句的任何失败压成退出码 `1`——2026-11-03 在 PowerShell 7 上实测，连原生命令自己的代码也一样（`cmd /c exit 7` 到达时是 `1`）——而先失败后成功到达时是 `0`；只有显式的 `exit N` 能原样传出。因此 `Shell: pwsh` 下的 `Run (expect-fail: <代码>):` 步骤，命令需要以 `; exit $LASTEXITCODE` 结尾。两者都记录在 `LIMITS.md` 里。
+
+> **Corrected 2026-11-03 (第九节)** —— `; exit $LASTEXITCODE` 这个结尾只对原生程序成立。`$LASTEXITCODE` 不跟踪 cmdlet，所以在一个失败的 cmdlet 之后，这个结尾会把失败变成 `0`，或者变成更早某个原生程序的代码。实测数据见第九节。
+
+### 九、修订，2026-11-03 —— 代码审查改变了什么
+
+v0.3 的一次代码审查是在发布之前、而不是之后做的，报告了十五条发现。每一条在采取行动之前都经过复现，或对照代码读过。本节记录改变了契约或改变了上文推理的那几条；其余的在变更日志里。
+
+**不认识的名称和缺失的 shell 是两件不同的事**（Yan 的裁决）。本工具不认识的名称，在任何机器上都是文档的缺陷，所以每次运行都会报。shell 是否存在，是关于运行检查的那台机器的事实，而那台机器不是读者的机器：一份声明了 `cmd` 的 Windows 手册，不应该让 Linux 上只检查路径的 CI 失败。这个问题只在 `--execute` 下、并且确实有命令要运行时才会询问——被闸住的命令和破坏性命令永远不会运行。于是只检查路径的运行根本不启动任何进程。
+
+**写错位置或互相冲突的 `Shell:` 行会被拒绝，而不是被忽略**（Yan 的裁决）。写在某个步骤里的 `Shell:` 行原先会被悄悄丢掉，让一份 bash 手册在 `cmd.exe` 里运行，产生的正是这条指令要消除的那种假 `COMMAND_FAILED`。现在它在所在的那一步报 `SHELL_UNRESOLVED`；点名不同 shell 的两行在文档级报 `SHELL_UNRESOLVED`；什么都不执行。同一个 shell 的两个名称（`Git Bash`、`bash`）不算冲突。
+
+**命令通过环境变量交给 bash。** 作为参数传递时，命令要经过两个解析器：Windows 按 MSVC 规则拼接命令行，Git Bash 的运行时按自己的规则拆分，于是引号前成对的反斜杠到达时被减半——`x='a\\'` 实测长度是 2 而不是 3。现在 bash 收到的是一个固定参数 `eval "$RUNBOOK_DRY_RUN_COMMAND"`，命令放在这个变量里传递，没有任何东西会重新解析它。
+
+**超时会停下整条命令，而不只是它的第一个进程。** 修复前实测：在 `Shell: Git Bash` 下，2 秒的超时用了 10.3 秒；一条程序是孙进程的 `cmd.exe` 命令也一样——这是一个早已存在的缺陷，Git Bash 的启动器使它变得无处不在。两种显而易见的修法都实测过并被否决：读取输出管道期间，`taskkill /T` 根本启动不了（实测 12 到 16 秒）；按父进程号遍历永远找不到那个程序，因为一个已经退出的 MSYS fork 进程会让父子链断开。现在在 Windows 上，命令以挂起状态在一个作业对象（Job Object）里启动，超时时终止整个作业；在 POSIX 上，命令自成一个进程组。
+
+**PowerShell 的那个结尾只适用于原生程序。** 在 PowerShell 7 上通过本工具自己的启动方式实测：`cmd /c exit 7` 到达时是 `1`，加上 `; exit $LASTEXITCODE` 是 `7`；失败的 `Get-Item` 到达时是 `1`，加上这个结尾却是 `0`，如果前面运行过 `cmd /c exit 5` 则是 `5`。因此失败的 cmdlet 应声明为 `Run (expect-fail: 1):`，不加这个结尾。
+
+**查找 shell 时绝不搜索当前目录。** Windows 上的 `shutil.which` 会先查当前目录，于是放在检查器运行目录里的一个 `git.bat` 在查找过程中被执行了。现在只搜索 `PATH` 里的绝对路径。回归测试会去掉 `NoDefaultCurrentDirectoryInExePath`——有些启动器会设置它，而 Windows 默认不设置；它在场时，这个测试在有漏洞的代码上也会通过。

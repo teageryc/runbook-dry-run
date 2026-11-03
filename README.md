@@ -73,7 +73,7 @@ Working directory: `/srv/ledger`
 Shell: `Git Bash`
 ```
 
-`Shell:` names the shell the commands are written for - `bash` (or `Git Bash`), `pwsh`, `powershell` or `cmd` - and `--execute` runs them in it. On Windows, Git Bash is found through git's own installation, never through `PATH`, which can answer with the WSL launcher. If the declared shell cannot be found, nothing is executed and the report says so. A document with no `Shell:` line runs in the platform default, as before.
+`Shell:` names the shell the commands are written for - `bash` (or `Git Bash`), `pwsh`, `powershell` or `cmd` - and `--execute` runs them in it. On Windows, Git Bash is found through git's own installation, never through `PATH`, which can answer with the WSL launcher. If the declared shell cannot be found, nothing is executed and the report says so. A document with no `Shell:` line runs in the platform default, as before. The line belongs before the first step; one inside a step, or two naming different shells, is refused. A name the tool does not know is reported on every run, but whether the shell exists is checked only under `--execute`, so a path-only CI run on Linux does not fail a Windows runbook for declaring `cmd`.
 
 ### What it checks
 
@@ -86,7 +86,7 @@ Shell: `Git Bash`
 | `MISSING_WORKING_DIRECTORY` · `NO_STEPS` | the document itself is unusable |
 | `EXPECTED_FAILURE_NOT_OBSERVED` | a `Run (expect-fail):` command exited `0`, or exited a code other than the declared one |
 | `MANUAL_GATE_UNRESOLVED` | an `After manual step:` names a step that does not exist or does not come first |
-| `SHELL_UNRESOLVED` | the `Shell:` line names a shell this tool does not know, or one this machine does not have; nothing is then executed |
+| `SHELL_UNRESOLVED` | the `Shell:` line names a shell this tool does not know, sits inside a step, or conflicts with another; or, under `--execute`, names a shell this machine does not have. Nothing is then executed |
 | `COMMAND_SKIPPED_DESTRUCTIVE` · `COMMAND_DEFERRED_MANUAL_GATE` | informational: a step was reported, not executed |
 
 ### Two things worth knowing before you trust it
@@ -101,7 +101,7 @@ A step marked `Run (destructive):` is **never** executed, with or without `--exe
 python -m unittest discover -s tests -v
 ```
 
-Thirty-five cases, a few of them platform-specific and skipped elsewhere. Every one asserts a finding code **and** the step number it must land on, because a suite that only asserts "a finding was produced" also passes on a checker that reports every step as broken.
+Forty-eight cases, a few of them platform-specific and skipped elsewhere. Every one of the twenty-six that expects a finding asserts its code **and** the step number it must land on (step 0 for a defect in the document itself); the rest test parsing, shell resolution, timeouts and clean runs. The step matters because a suite that only asserts "a finding was produced" also passes on a checker that reports every step as broken.
 
 Two of them assert a side effect rather than a report: a destructive command must leave **no** marker on disk, and an `expect-fail` command must leave **one**. Without the second, a clean report is indistinguishable from a directive the parser silently ignored. A runbook declaring `Shell:` must leave its marker too, and one whose shell cannot be found must leave none.
 
@@ -176,7 +176,7 @@ Working directory: `/srv/ledger`
 Shell: `Git Bash`
 ```
 
-`Shell:` 点明命令是为哪个 shell 写的——`bash`（或 `Git Bash`）、`pwsh`、`powershell` 或 `cmd`——`--execute` 就在那个 shell 里运行它们。在 Windows 上，Git Bash 通过 git 自己的安装目录找到，绝不通过 `PATH`，因为 `PATH` 可能给出 WSL 启动器。声明的 shell 找不到时，什么都不执行，报告会说明这一点。没有 `Shell:` 行的文档照旧在平台默认 shell 里运行。
+`Shell:` 点明命令是为哪个 shell 写的——`bash`（或 `Git Bash`）、`pwsh`、`powershell` 或 `cmd`——`--execute` 就在那个 shell 里运行它们。在 Windows 上，Git Bash 通过 git 自己的安装目录找到，绝不通过 `PATH`，因为 `PATH` 可能给出 WSL 启动器。声明的 shell 找不到时，什么都不执行，报告会说明这一点。没有 `Shell:` 行的文档照旧在平台默认 shell 里运行。这一行应写在第一个步骤之前；写在步骤里的、或点名不同 shell 的两行，都会被拒绝。本工具不认识的名称每次运行都会报，但 shell 是否存在只在 `--execute` 下检查，所以 Linux 上只检查路径的 CI 不会因为一份 Windows 手册声明了 `cmd` 而失败。
 
 ### 它检查什么
 
@@ -189,7 +189,7 @@ Shell: `Git Bash`
 | `MISSING_WORKING_DIRECTORY` · `NO_STEPS` | 文档本身不可用 |
 | `EXPECTED_FAILURE_NOT_OBSERVED` | 某条 `Run (expect-fail):` 命令退出码为 `0`，或不是声明的那一个 |
 | `MANUAL_GATE_UNRESOLVED` | 某个 `After manual step:` 点的步骤不存在，或不在本步骤之前 |
-| `SHELL_UNRESOLVED` | `Shell:` 行点名的 shell 本工具不认识，或这台机器上没有；此时什么都不执行 |
+| `SHELL_UNRESOLVED` | `Shell:` 行点名的 shell 本工具不认识、写在了步骤里，或与另一行冲突；或者在 `--execute` 下，点名的 shell 不在这台机器上。此时什么都不执行 |
 | `COMMAND_SKIPPED_DESTRUCTIVE` · `COMMAND_DEFERRED_MANUAL_GATE` | 提示性：步骤被报告，未被执行 |
 
 ### 信任它之前值得知道的两件事
@@ -204,7 +204,7 @@ Shell: `Git Bash`
 python -m unittest discover -s tests -v
 ```
 
-三十五个用例，其中几个只适用于特定平台，在别的平台上跳过。每一个都同时断言发现代码**和**它必须落在的步骤编号，因为只断言"产生了某个发现"的套件，在一个把每一步都报成坏掉的检查器上也会通过。
+四十八个用例，其中几个只适用于特定平台，在别的平台上跳过。预期会产生发现的二十六个用例，每一个都同时断言发现代码**和**它必须落在的步骤编号（文档本身的缺陷落在第 0 步）；其余的测试解析、shell 查找、超时和干净的运行。步骤编号之所以要紧，是因为只断言"产生了某个发现"的套件，在一个把每一步都报成坏掉的检查器上也会通过。
 
 其中两个断言的是副作用而不是报告：破坏性命令必须在磁盘上**不留**标记，而 `expect-fail` 命令必须留下**一个**。没有后者，「报告干净」与「解析器默默忽略了这条指令」就分不出来。声明了 `Shell:` 的手册同样必须留下标记，而 shell 找不到的手册必须一个都不留。
 

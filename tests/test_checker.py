@@ -123,6 +123,7 @@ class DocumentLevelDefects(unittest.TestCase):
     def test_a_document_with_no_steps_says_so(self):
         findings = check(parse("# Runbook: empty\n"), base_dir=REPO_ROOT)
         self.assertEqual(["NO_STEPS"], [f.code for f in findings])
+        self.assertEqual({"NO_STEPS"}, codes_at(findings, 0))
 
     def test_a_document_with_no_working_directory_says_so_at_document_level(self):
         text = "# Runbook: nowhere\n\n## Step 1 - do it\nOn failure: stop.\n"
@@ -132,6 +133,7 @@ class DocumentLevelDefects(unittest.TestCase):
     def test_a_malformed_document_does_not_raise(self):
         findings = check(parse("garbage ## Step not-a-number\n"), base_dir=REPO_ROOT)
         self.assertEqual(["NO_STEPS"], [f.code for f in findings])
+        self.assertEqual({"NO_STEPS"}, codes_at(findings, 0))
 
 
 class ExpectedFailureDirective(unittest.TestCase):

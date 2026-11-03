@@ -16,14 +16,17 @@ the document declared Git Bash in its header, and the format could not say so.
 
 - `Shell: <name>` - document-level; `bash` (alias `Git Bash`), `pwsh`, `powershell`
   or `cmd`, case-insensitive. Under `--execute` every command runs in that shell.
-- `SHELL_UNRESOLVED` (error, step 0) - an unknown name, or a shell this machine does
-  not have. No command in the document is then executed, with or without
-  `--execute`. Falling back to the platform default was rejected: it is the
-  behaviour that produced the three false findings.
+- `SHELL_UNRESOLVED` (error) - on every run, a `Shell:` name the tool does not know
+  (step 0), a `Shell:` line inside a step (at that step), or two lines naming
+  different shells (step 0); under `--execute`, when a command would run, a shell
+  this machine does not have. No command in the document is then executed.
+  Falling back to the platform default was rejected: it is the behaviour that
+  produced the three false findings.
 - On Windows, Git Bash is found by walking up from `git --exec-path` to
   `bin\bash.exe`, never through `PATH`: on the machine this was built on,
   `shutil.which("bash")` answers with the WSL launcher in `WindowsApps`.
-- Fifteen test cases, thirty-five in total, some platform-specific and skipped
+- `Launcher`, returned by `resolve_shell()`: how a command reaches its shell.
+- Twenty-eight test cases, forty-eight in total, some platform-specific and skipped
   elsewhere. The declared-bash fixture must leave its marker; an unresolved shell
   must leave none. Its bash probe is `[[ ]]`, because a runner launched from Git
   Bash puts coreutils' `[.exe` on `PATH`, where `cmd.exe` finds it and a
@@ -31,15 +34,31 @@ the document declared Git Bash in its header, and the format could not say so.
 
 ### Changed
 
-- The spec gains section 8 and the `Shell:` line in sections 3 and 4; section 7's
-  "not built" carries a dated correction.
-- `LIMITS.md` records four limits of the directive, and its quoting paragraph now
-  names the declared shell.
+- The spec gains sections 8 and 9 and the `Shell:` line in sections 3 and 4;
+  section 7's "not built" and two statements of section 8 carry dated corrections.
+- `LIMITS.md` records the directive's limits, and its quoting paragraph now names
+  the declared shell.
 - `.github/workflows/ci.yml` smokes the directive both ways: a declared shell must
   leave its marker, an unresolved one must exit `1` and leave none.
 
 ### Fixed
 
+Found by a code review of this release before it shipped (spec section 9); each
+was reproduced, then fixed test-first.
+
+- A timeout now stops the whole command tree. A 2-second timeout took 10.3 seconds
+  under Git Bash, and under `cmd.exe` whenever the program was a grandchild - the
+  second case predates this release. Windows uses a Job Object; POSIX a process
+  group.
+- Shell resolution no longer searches the current directory, where a planted
+  `git.bat` was executed - even without `--execute`.
+- Bash receives its command in an environment variable: as an argument, a
+  backslash pair before a quote arrived halved.
+- Git Bash output is decoded as UTF-8, and no output can raise a decode error.
+- A `Shell:` line inside a step, or a second conflicting one, is refused instead
+  of silently dropped.
+- `Runbook.shell` is appended after the 0.2 fields, so positional construction
+  written against 0.2 still lines up.
 - `runbook_dry_run.__version__` read `0.1.0` through the 0.2.0 release; it now
   matches this changelog.
 
