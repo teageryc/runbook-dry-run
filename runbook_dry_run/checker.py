@@ -7,8 +7,10 @@ step it belongs to, because "this runbook has a broken path" is not actionable a
 
 from __future__ import annotations
 
+import functools
 import os
 import re
+import signal
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -364,22 +366,108 @@ def _run(
         env = {**os.environ, COMMAND_VARIABLE: command}
     else:
         args = [*launcher.argv, command]
+    # A timeout must stop everything the command started, not only its first
+    # process: Git Bash's bin/bash.exe is a launcher whose real bash is a second
+    # process, and cmd.exe or bash may start the program that holds the output
+    # pipes. Reading those pipes waits for the whole tree, so a command that never
+    # ends would hang the checker. POSIX: the command leads its own process group.
+    # Windows: it starts suspended inside a Job Object, which also holds every
+    # process it starts later - even when an intermediate MSYS process has exited
+    # and broken the parent chain, which defeats any walk by parent id.
+    job = _new_job() if sys.platform == "win32" else None
+    platform = (
+        {"creationflags": _CREATE_SUSPENDED}
+        if sys.platform == "win32"
+        else {"start_new_session": True}
+    )
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             args,
             shell=not launcher.argv,
             env=env,
             cwd=cwd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
+            **platform,
         )
-    except subprocess.TimeoutExpired:
-        return 124, f"timed out after {timeout:g}s"
     except OSError as exc:  # pragma: no cover - platform dependent
+        _close_job(job)
         return 127, str(exc)
-    detail = (proc.stderr or proc.stdout or "").strip().splitlines()
+    if sys.platform == "win32":
+        job = _assign_and_resume(job, proc)
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_tree(proc, job)
+        try:
+            proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:  # pragma: no cover - a tree that would not die
+            pass
+        return 124, f"timed out after {timeout:g}s"
+    finally:
+        _close_job(job)
+    detail = (stderr or stdout or "").strip().splitlines()
     return proc.returncode, detail[-1] if detail else ""
+
+
+_CREATE_SUSPENDED = 0x00000004
+
+
+@functools.lru_cache(maxsize=None)
+def _windows_api():
+    """kernel32 and ntdll entry points for Job Objects. Windows only."""
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    ntdll = ctypes.WinDLL("ntdll")
+    kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+    kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+    kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
+    kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    kernel32.TerminateJobObject.restype = wintypes.BOOL
+    kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    ntdll.NtResumeProcess.argtypes = [wintypes.HANDLE]
+    return kernel32, ntdll
+
+
+def _new_job():
+    return _windows_api()[0].CreateJobObjectW(None, None) or None
+
+
+def _close_job(job) -> None:
+    if job is not None:
+        _windows_api()[0].CloseHandle(job)
+
+
+def _assign_and_resume(job, proc: subprocess.Popen):
+    """Put the suspended command in the job, then let it run.
+
+    Assigned while suspended, so nothing it starts can escape the job. If the
+    assignment fails, the command still runs and a timeout falls back to killing
+    only its first process (recorded in LIMITS.md).
+    """
+    kernel32, ntdll = _windows_api()
+    handle = int(proc._handle)  # CPython's process handle for the child
+    if job is not None and not kernel32.AssignProcessToJobObject(job, handle):
+        _close_job(job)
+        job = None
+    ntdll.NtResumeProcess(handle)
+    return job
+
+
+def _kill_tree(proc: subprocess.Popen, job) -> None:
+    """Kill a timed-out command and everything it started."""
+    if job is not None:
+        _windows_api()[0].TerminateJobObject(job, 1)
+    elif sys.platform != "win32":
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    proc.kill()
 
 
 def _gate_defect(step: Step, step_numbers: set[int]) -> Finding | None:

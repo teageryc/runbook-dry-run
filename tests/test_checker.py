@@ -10,6 +10,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -361,6 +362,35 @@ class ShellResolution(unittest.TestCase):
     def test_cmd_and_powershell_are_refused_elsewhere(self):
         self.assertIsNone(resolve_shell("cmd")[0])
         self.assertIsNone(resolve_shell("powershell")[0])
+
+
+class Timeouts(unittest.TestCase):
+    """--timeout must stop the command, not merely stop waiting for its first process.
+
+    Git Bash's bin/bash.exe is a launcher whose real bash is a second process, and
+    cmd.exe or bash may start the program that actually holds the output pipes.
+    Killing only the direct child left the checker reading pipes until the whole
+    tree finished - forever, for a command that never ends.
+    """
+
+    def _timed(self, text: str):
+        started = time.monotonic()
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True, timeout=2)
+        return findings, time.monotonic() - started
+
+    def test_a_timeout_under_a_declared_shell_stops_the_command(self):
+        findings, elapsed = self._timed(one_step("Shell: `bash`", "Run: `sleep 10`"))
+        self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 1))
+        self.assertIn("timed out", findings[0].detail)
+        self.assertLess(elapsed, 7, f"the timeout did not stop the command ({elapsed:.1f}s)")
+
+    def test_a_timeout_in_the_platform_default_stops_the_command(self):
+        findings, elapsed = self._timed(
+            one_step("", "Run: `python -c \"import time; time.sleep(10)\"`")
+        )
+        self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 1))
+        self.assertIn("timed out", findings[0].detail)
+        self.assertLess(elapsed, 7, f"the timeout did not stop the command ({elapsed:.1f}s)")
 
 
 class ProgramLookup(unittest.TestCase):
