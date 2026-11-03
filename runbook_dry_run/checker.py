@@ -106,9 +106,11 @@ class Step:
 class Runbook:
     title: str = ""
     working_directory: str | None = None
-    shell: str | None = None
     element_inventory: list[str] = field(default_factory=list)
     steps: list[Step] = field(default_factory=list)
+    # Fields added after 0.2 go below this line: Runbook is public API, and a field
+    # inserted above shifts every positional argument written against 0.2.
+    shell: str | None = None
 
 
 def _first_backticked(value: str) -> str:
