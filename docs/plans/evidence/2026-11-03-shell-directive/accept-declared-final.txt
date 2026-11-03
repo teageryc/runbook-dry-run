@@ -1,0 +1,3 @@
+C:/Users/cheny/AppData/Local/Temp/claude/g--Business-AI/7798a767-8347-4ba3-b85e-83b984a75a68/scratchpad/procedure-declared.md: 2 finding(s).
+[info] step 6 (Push): COMMAND_SKIPPED_DESTRUCTIVE - marked destructive and not executed: cd /g/Projects/runbook-dry-run && git push -u --follow-tags origin main
+[info] step 7 (Verify the push landed, against the remote rather than the local pointer): COMMAND_DEFERRED_MANUAL_GATE - not executed: this step waits on step 6, which a human completes and this check cannot observe
