@@ -7,8 +7,10 @@ every step as broken. The step number is what makes the assertion worth anything
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 import unittest
+from unittest import mock
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIXTURES = os.path.join(REPO_ROOT, "tests", "fixtures")
@@ -214,6 +216,31 @@ class ManualGateDirective(unittest.TestCase):
         reader must be told which ones were not. Without it, none were.
         """
         self.assertEqual([], run_fixture("manual-gate.md"))
+
+
+class ShellDirective(unittest.TestCase):
+    """A document declares the shell its commands are written for.
+
+    Every execution test pairs with a control that runs the same command undeclared:
+    a clean report proves nothing unless the declaration is what made it clean.
+    """
+
+    MARKER = os.path.join(REPO_ROOT, "shell-bash-marker.tmp")
+
+    def setUp(self):
+        if os.path.exists(self.MARKER):
+            os.remove(self.MARKER)
+
+    def tearDown(self):
+        if os.path.exists(self.MARKER):
+            os.remove(self.MARKER)
+
+    def test_the_shell_line_is_read_and_an_absent_one_is_none(self):
+        book = parse("# Runbook: x\n\nWorking directory: `.`\nShell: `Git Bash`\n")
+        self.assertEqual("Git Bash", book.shell)
+        with open(os.path.join(FIXTURES, "good.md"), encoding="utf-8") as handle:
+            self.assertIsNone(parse(handle.read()).shell)
+
 
 if __name__ == "__main__":
     unittest.main()

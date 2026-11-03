@@ -24,6 +24,7 @@ DIRECTIVE = re.compile(
 EXPECT_FAIL_KEY = re.compile(r"^Run \(expect-fail(?:\s*:\s*(\d+))?\)$")
 STEP_REFERENCE = re.compile(r"(\d+)")
 WORKING_DIRECTORY = re.compile(r"^Working directory\s*:\s*(.*)$")
+SHELL_LINE = re.compile(r"^Shell\s*:\s*(.*)$")
 ELEMENTS_HEADING = re.compile(r"^Elements\s*:\s*$")
 BULLET = re.compile(r"^[-*]\s+(.*?)\s*$")
 BACKTICKED = re.compile(r"`([^`]+)`")
@@ -91,6 +92,7 @@ class Step:
 class Runbook:
     title: str = ""
     working_directory: str | None = None
+    shell: str | None = None
     element_inventory: list[str] = field(default_factory=list)
     steps: list[Step] = field(default_factory=list)
 
@@ -138,6 +140,11 @@ def parse(text: str) -> Runbook:
             wd = WORKING_DIRECTORY.match(line)
             if wd:
                 book.working_directory = _first_backticked(wd.group(1))
+                in_elements = False
+                continue
+            shell = SHELL_LINE.match(line)
+            if shell:
+                book.shell = _first_backticked(shell.group(1))
                 in_elements = False
                 continue
             if ELEMENTS_HEADING.match(line):
