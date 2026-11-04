@@ -398,7 +398,9 @@ def _run(
             errors="replace",
             **platform,
         )
-    except OSError as exc:  # pragma: no cover - platform dependent
+    except (OSError, ValueError) as exc:
+        # ValueError: a NUL byte in the command or its environment, which no
+        # operating system will start. A defect in the document, not in the tool.
         _close_job(job)
         return 127, str(exc)
     if sys.platform == "win32":

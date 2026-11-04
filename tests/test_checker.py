@@ -402,6 +402,21 @@ class Timeouts(unittest.TestCase):
         self.assertLess(elapsed, 7, f"the timeout did not stop the command ({elapsed:.1f}s)")
 
 
+class CommandsThatCannotStart(unittest.TestCase):
+    """A command the operating system refuses to start is a finding, never a crash.
+
+    A traceback tells the reader nothing about the steps that were fine.
+    """
+
+    def test_a_nul_byte_in_a_command_is_a_finding(self):
+        for shell_line in ("", "Shell: `bash`"):
+            with self.subTest(shell_line=shell_line or "undeclared"):
+                text = one_step(shell_line, "Run: `echo a\x00b`")
+                findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+                self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 1))
+                self.assertIn("null", findings[0].detail)
+
+
 class ProgramLookup(unittest.TestCase):
     """Windows searches the current directory before PATH.
 
