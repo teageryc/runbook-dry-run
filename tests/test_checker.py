@@ -21,6 +21,7 @@ sys.path.insert(0, REPO_ROOT)
 
 from runbook_dry_run.checker import (  # noqa: E402
     _git_bash,
+    FINDING_CODES,
     Launcher,
     Runbook,
     Step,
@@ -449,6 +450,14 @@ class Timeouts(unittest.TestCase):
         self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 1))
         self.assertIn("timed out", findings[0].detail)
         self.assertLess(elapsed, 7, f"the timeout did not stop the command ({elapsed:.1f}s)")
+
+
+class FindingDescriptions(unittest.TestCase):
+    def test_shell_unresolved_names_every_case_that_emits_it(self):
+        """A reader shown 'unknown or missing' for a misplaced line looks in the wrong place."""
+        description = FINDING_CODES["SHELL_UNRESOLVED"]
+        for case in ("does not know", "inside a step", "different shells", "does not have"):
+            self.assertIn(case, description)
 
 
 class ProcessPlacement(unittest.TestCase):

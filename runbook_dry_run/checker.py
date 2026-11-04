@@ -59,7 +59,11 @@ FINDING_CODES = {
     "EXPECTED_FAILURE_NOT_OBSERVED": "the step declared its command would fail and it did not",
     "COMMAND_DEFERRED_MANUAL_GATE": "the step waits on a human and its commands were not executed",
     "MANUAL_GATE_UNRESOLVED": "the step waits on a step that does not exist or does not precede it",
-    "SHELL_UNRESOLVED": "the document names a shell this tool does not know or this machine does not have",
+    "SHELL_UNRESOLVED": (
+        "the document's Shell: cannot be used - a name this tool does not know, a Shell: line "
+        "inside a step, two lines naming different shells, or, when a command would run, "
+        "a shell this machine does not have; no command in the document is executed"
+    ),
 }
 
 
