@@ -151,6 +151,20 @@ A code review of v0.3, run before the release rather than after it, reported fif
 
 **Shell resolution never searches the current directory.** `shutil.which` on Windows looks in the current directory first, so a `git.bat` planted where the checker ran was executed during resolution. Only absolute `PATH` entries are searched now. The regression test removes `NoDefaultCurrentDirectoryInExePath`, which some launchers set and Windows leaves unset; with it present, the test also passed on the vulnerable code.
 
+### 10. Amendment, 2026-11-03 — what the second review changed
+
+A second code review, over the first review's fixes (`6f35c5b..dacaf75`), reported fifteen more findings before anything was pushed. Each was reproduced, measured or read against the code before it was acted on. The ones that change the contract or the reasoning are below; the rest are in the changelog.
+
+**POSIX commands stay in the checker's session** (Yan's ruling). The first timeout fix moved every POSIX command into a new session so that a timeout could stop it as a tree. That broke §3 and §8 for every runbook, declared or not — `sudo` and `ssh` could no longer prompt, and Ctrl+C no longer reached the command — to fix a hang that had been measured only on Windows; on POSIX the old code never waited on the pipes after a kill. It was reverted before release and checked on Linux (WSL Ubuntu, the first run of this code on Linux): a command's process group is the checker's again.
+
+**An interrupted check stops its command.** `subprocess.run` kills the child on any exception; the bare `Popen` that replaced it did not, so Ctrl+C left the command running and unreported. A timeout and an interruption now both kill the command and collect it.
+
+**`cmd.exe` and PowerShell are read in the console's output code page.** Measured: the same failing `echo` arrived as `Schl�ssel` when the checker was started from Git Bash (console 437) and as `SchlÃ¼ssel` from PowerShell (console 65001), because Python decodes in the ANSI page, cp1252. The page is read when each command starts; Git Bash stays UTF-8.
+
+**`Runbook.shell` is derived, not stored.** `check()` read the declarations for conflicts and `shell` for resolution, so a caller could set the two apart. It is now a read-only property, the first declaration, changed before release while the public API still costs nothing to change.
+
+**What stays a limit** (Yan's ruling). The parser does not know fenced code, so a fenced `Run:` example is executed, and a `Working directory:` or `Elements:` line inside a step is ignored. Changing either would change what existing runbooks do, so both are recorded in `LIMITS.md` instead of changed in this release.
+
 
 ---
 
@@ -299,3 +313,17 @@ v0.3 的一次代码审查是在发布之前、而不是之后做的，报告了
 **PowerShell 的那个结尾只适用于原生程序。** 在 PowerShell 7 上通过本工具自己的启动方式实测：`cmd /c exit 7` 到达时是 `1`，加上 `; exit $LASTEXITCODE` 是 `7`；失败的 `Get-Item` 到达时是 `1`，加上这个结尾却是 `0`，如果前面运行过 `cmd /c exit 5` 则是 `5`。因此失败的 cmdlet 应声明为 `Run (expect-fail: 1):`，不加这个结尾。
 
 **查找 shell 时绝不搜索当前目录。** Windows 上的 `shutil.which` 会先查当前目录，于是放在检查器运行目录里的一个 `git.bat` 在查找过程中被执行了。现在只搜索 `PATH` 里的绝对路径。回归测试会去掉 `NoDefaultCurrentDirectoryInExePath`——有些启动器会设置它，而 Windows 默认不设置；它在场时，这个测试在有漏洞的代码上也会通过。
+
+### 十、修订，2026-11-03 —— 第二轮审查改变了什么
+
+第二轮代码审查针对的是第一轮的修复（`6f35c5b..dacaf75`），在任何东西推送之前又报告了十五条发现。每一条在采取行动之前，都经过复现、实测，或对照代码读过。改变了契约或推理的那几条记在下面；其余的在变更日志里。
+
+**POSIX 上的命令留在检查器的会话里**（Yan 的裁决）。第一轮的超时修复把每一条 POSIX 命令都挪进了一个新会话，好让超时能把它连同子孙一起停下。这对每一份手册——无论是否声明了 shell——都破坏了第三节和第八节：`sudo` 和 `ssh` 无法再提示输入，Ctrl+C 也到不了命令；为的却是修一个只在 Windows 上测到过的卡死，而在 POSIX 上，旧代码杀掉进程之后从来不等管道。这一改动在发布前撤回，并在 Linux 上验证过（WSL Ubuntu，这段代码第一次在 Linux 上运行）：命令的进程组重新是检查器的进程组。
+
+**被中断的检查会停下它的命令。** `subprocess.run` 遇到任何异常都会杀掉子进程；取代它的裸 `Popen` 不会，于是 Ctrl+C 让命令继续运行，而且无人报告。现在超时和中断都会杀掉命令并回收它。
+
+**`cmd.exe` 和 PowerShell 的输出按控制台的输出代码页读取。** 实测：同一条失败的 `echo`，检查器从 Git Bash 启动时（控制台 437）到达为 `Schl�ssel`，从 PowerShell 启动时（控制台 65001）到达为 `SchlÃ¼ssel`，因为 Python 按 ANSI 代码页 cp1252 解码。代码页在每条命令启动时读取；Git Bash 仍按 UTF-8。
+
+**`Runbook.shell` 是推导出来的，不是存下来的。** `check()` 用声明列表判断冲突，又用 `shell` 解析 shell，于是调用者可以让两者不一致。现在它是一个只读属性，即第一条声明；趁发布之前公开接口还改得起，就改了。
+
+**仍然是局限的部分**（Yan 的裁决）。解析器不认识围栏代码块，所以围栏里作为示例的 `Run:` 会被执行；写在步骤里的 `Working directory:` 或 `Elements:` 行会被忽略。改动任何一项都会改变现有手册的行为，所以这两项记进 `LIMITS.md`，而不在这个版本里修改。

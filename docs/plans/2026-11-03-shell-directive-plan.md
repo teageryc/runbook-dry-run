@@ -639,4 +639,47 @@ The `code-review` skill reported fifteen findings over `77fa3d4..6f35c5b`. Two c
 | 14 | This plan cited relative and scratchpad paths | Absolute paths; probes archived below | docs commit |
 | 15 | No tests for timeouts, cmd execution, misplaced lines | Added with #1, #5 and #8 | as above |
 
-**Evidence** (all under `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\`): `probe_shells.py` (the pre-plan measurements), `accept-declared.txt` and `accept-original.txt` (Task 8 acceptance and its control, on the pre-review code at `6f35c5b`), `accept-declared-final.txt` and `accept-original-final.txt` (the same pair re-run on the reviewed code at `ee45449`, with the tree committed first: an earlier re-run with the docs still uncommitted correctly failed the procedure's own "nothing is uncommitted" step), `backslash_red.py` (finding 3 reproduced, then fixed), `run_timing.py`, `tree_kill_debug.py`, `taskkill_variants.py`, `msys_tree.py`, `ctypes_tree_kill.py` and `job_kill.py` (finding 1: why taskkill and the parent walk fail, and the Job Object that works), `pwsh_exit_codes.py` (finding 6), `audit_test_claims.py` (finding 11), `make_declared_copy.py` (builds the Task 8 copy). The reviewer's own probes are in `review\`; they call the pre-fix API at `6f35c5b` (`resolve_shell` then returned a tuple) and do not run against later commits.
+**Evidence**, first round:
+
+- `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\probe_shells.py` — the pre-plan measurements.
+- `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\accept-declared.txt` and `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\accept-original.txt` — Task 8 acceptance and its control, on the pre-review code at `6f35c5b`.
+- `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\accept-declared-final.txt` and `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\accept-original-final.txt` — the same pair re-run on the reviewed code at `ee45449`, with the tree committed first: an earlier re-run with the docs still uncommitted correctly failed the procedure's own "nothing is uncommitted" step.
+- `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\backslash_red.py` — finding 3 reproduced, then fixed.
+- `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\run_timing.py`, `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\tree_kill_debug.py`, `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\taskkill_variants.py`, `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\msys_tree.py`, `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\ctypes_tree_kill.py` and `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\job_kill.py` — finding 1: why taskkill and the parent walk fail, and the Job Object that works.
+- `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\pwsh_exit_codes.py` — finding 6.
+- `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\audit_test_claims.py` — finding 11.
+- `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\make_declared_copy.py` — builds the Task 8 copy.
+- `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\review\` — the reviewer's own probes. They call the pre-fix API at `6f35c5b` (`resolve_shell` then returned a tuple) and do not run against later commits.
+
+> **Corrected 2026-11-03 (second review)** — row 1 records what `9221eb9` built, and its POSIX half, a process group of the command's own, was reverted before release in `d9c3059`; see the second review round below. The Evidence list was rewritten with an absolute path on every file (second review, finding 14), and `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\run_timing.py` and `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\audit_test_claims.py` were amended (`8ef3547`, `526586d`).
+
+## Second review round (2026-11-03)
+
+The `code-review` skill (level `xhigh`) reported fifteen findings over `6f35c5b..dacaf75`, the first round's fixes. Each was reproduced, measured or read against the code before acting. Yan picked three dispositions: POSIX back to v0.2's placement (findings 2 and 4), the two parser findings recorded in `G:\Projects\runbook-dry-run\LIMITS.md` rather than changed (5 and 6), and all three optional cleanups (10, 12, 13). Every code fix was red first, then green from Git Bash AND PowerShell; the POSIX ones were also red, then green, under WSL Ubuntu.
+
+| # | Finding | Disposition | Commit |
+| --- | --- | --- | --- |
+| 1 | `_git_bash` decoded git's exec path in the locale code page (a non-ASCII install crashed `check()`) and read its pipe without a bound after a kill | Bytes decoded as UTF-8 with a locale fallback; both waits bounded | `b5c6f40` |
+| 2 | The bare `Popen` lost `subprocess.run`'s kill-on-exception: Ctrl+C left the command running | Kill and reap on any exception | `d9c3059` |
+| 3 | A NUL byte in a command raised `ValueError` out of `check()` and leaked the job handle | `COMMAND_FAILED`, exit 127 | `d3461c5` |
+| 4 | `start_new_session` on every POSIX command broke spec §3 and §8 (`sudo`, `ssh`, Ctrl+C) | Yan's pick: v0.2's placement on POSIX; Windows keeps the Job Object | `d9c3059` |
+| 5 | `Working directory:` and `Elements:` inside a step are dropped silently (since v0.1) | Yan's pick: recorded in `G:\Projects\runbook-dry-run\LIMITS.md`, parser unchanged | `3592bab` |
+| 6 | A fenced `Shell:` example inside a step refuses the document; any fenced directive is read, so a fenced `Run:` example is executed (since v0.1) | Yan's pick: recorded in `G:\Projects\runbook-dry-run\LIMITS.md` | `3592bab` |
+| 7 | The conflict test ran `exit 0`, so it could not tell refused from run | Marker absence asserted; with `execute = False` removed the new test fails and the old one passes | `f585870` |
+| 8 | `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-shell-directive\run_timing.py` crashed on the two-argument `_kill_tree` | Arguments passed through; re-run at HEAD, both timeouts 2.0-2.1 s | `8ef3547` |
+| 9 | `G:\Projects\runbook-dry-run\LIMITS.md` said an escaped program keeps the checker waiting; the code moves on after 10 s and leaves it running | Rewritten in EN and 中文 | `06d2608` |
+| 10 | `cmd.exe` and PowerShell output decoded in the ANSI page | Yan's pick: the console's output code page, read per command | `3c095cf` |
+| 11 | `SHELL_UNRESOLVED`'s description named two of its four cases | Rewritten, with a test | `f8436ed` |
+| 12 | `_has_commands_to_run` duplicated the loop's "does it run" rule | Yan's pick: one predicate; with it patched to always run, the suite goes red | `aa475d1` |
+| 13 | `Runbook.shell` duplicated `shell_declarations[0]` and could disagree with it | Yan's pick: a read-only property | `e5a9c61` |
+| 14 | This plan's Evidence paragraph cited bare filenames | Absolute paths, above | this section's commit |
+| 15 | README counts with no command or tree | Counts removed; the audit command named, and it now exits 1 on a miss | `526586d` |
+
+**Deviations.** Ubuntu under WSL has `python3` and no `python`; CI's `setup-python` provides `python`, which the fixtures call, so the WSL scripts put a `python` link to `python3` first on `PATH`. An inline `wsl.exe -- sh -c '...'` expanded `$PATH` in the Windows launcher, where "Program Files (x86)" broke the inner shell; the WSL commands are therefore passed as script files.
+
+**Evidence**, second round:
+
+- `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-second-review\probe_codepages.py` and `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-second-review\probe_codepages-powershell.txt` — finding 10: from PowerShell, with the console at 65001, pwsh, Windows PowerShell and cmd all wrote UTF-8, while Python's default decoding is cp1252.
+- `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-second-review\mutate_executes.py` — finding 12: the suite with `_executes()` patched to always run (1 of 55 red).
+- `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-second-review\wsl_tests.sh` and `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-second-review\wsl-full-suite.txt` — the whole suite on Linux (WSL Ubuntu, Python 3.12.3) at `526586d`: 57 run, 11 skipped, exit 0; the first run of this code on Linux.
+- `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-second-review\wsl_smoke.sh` and `G:\Projects\runbook-dry-run\docs\plans\evidence\2026-11-03-second-review\wsl-smoke.txt` — CI's `smoke` job replayed step by step on Linux at `526586d`: 8 of 8 pass.

@@ -26,7 +26,8 @@ the document declared Git Bash in its header, and the format could not say so.
   `bin\bash.exe`, never through `PATH`: on the machine this was built on,
   `shutil.which("bash")` answers with the WSL launcher in `WindowsApps`.
 - `Launcher`, returned by `resolve_shell()`: how a command reaches its shell.
-- Twenty-eight test cases, forty-eight in total, some platform-specific and skipped
+- Thirty-seven test cases, fifty-seven in total (`grep -c -E '^    def test_'
+  tests/test_checker.py` gives 20 at v0.2.0), some platform-specific and skipped
   elsewhere. The declared-bash fixture must leave its marker; an unresolved shell
   must leave none. Its bash probe is `[[ ]]`, because a runner launched from Git
   Bash puts coreutils' `[.exe` on `PATH`, where `cmd.exe` finds it and a
@@ -34,17 +35,21 @@ the document declared Git Bash in its header, and the format could not say so.
 
 ### Changed
 
-- The spec gains sections 8 and 9 and the `Shell:` line in sections 3 and 4;
-  section 7's "not built" and two statements of section 8 carry dated corrections.
+- The spec gains sections 8, 9 and 10 and the `Shell:` line in sections 3 and 4;
+  section 7's "not built", two statements of section 8 and one of section 9 carry
+  dated corrections.
 - `LIMITS.md` records the directive's limits, and its quoting paragraph now names
-  the declared shell.
+  the declared shell. It also records three limits the second review found and
+  left in place: the parser does not know fenced code, so a fenced `Run:` example
+  is executed; `Working directory:` and `Elements:` inside a step are ignored; a
+  command that runs `chcp` is decoded in the code page it started with.
 - `.github/workflows/ci.yml` smokes the directive both ways: a declared shell must
   leave its marker, an unresolved one must exit `1` and leave none.
 
 ### Fixed
 
-Found by a code review of this release before it shipped (spec section 9); each
-was reproduced, then fixed test-first.
+Found by two code reviews of this release before it shipped (spec sections 9 and
+10); each was reproduced, then fixed test-first.
 
 - On Windows, a timeout now stops the whole command tree. A 2-second timeout took
   10.3 seconds under Git Bash, and under `cmd.exe` whenever the program was a
@@ -56,6 +61,11 @@ was reproduced, then fixed test-first.
   running unreported.
 - Shell resolution no longer searches the current directory, where a planted
   `git.bat` was executed - even without `--execute`.
+- A Git installed under a non-ASCII folder no longer crashes shell resolution:
+  `git --exec-path` is read as UTF-8, and a git that never answers is given up on.
+- A NUL byte in a command is a `COMMAND_FAILED` finding, not a traceback; true of
+  undeclared runbooks before this release too.
+- `FINDING_CODES["SHELL_UNRESOLVED"]` names all four cases that emit it.
 - Bash receives its command in an environment variable: as an argument, a
   backslash pair before a quote arrived halved.
 - Git Bash output is decoded as UTF-8, and no output can raise a decode error.

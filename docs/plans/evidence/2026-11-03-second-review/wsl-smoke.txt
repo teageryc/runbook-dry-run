@@ -1,0 +1,22 @@
+tests/fixtures/good.md: every step is followable (0 findings).
+[PASS] a followable runbook exits 0
+tests/fixtures/bad-path.md: 1 finding(s).
+[error] step 3 (Open the operator handbook): PATH_UNRESOLVED - docs/operator-handbook-that-was-never-written.md does not resolve from /mnt/g/Projects/runbook-dry-run (tried /mnt/g/Projects/runbook-dry-run/docs/operator-handbook-that-was-never-written.md)
+[PASS] an unfollowable runbook exits 1
+tests/fixtures/destructive.md: 1 finding(s).
+[info] step 2 (Write the release marker into the live directory): COMMAND_SKIPPED_DESTRUCTIVE - marked destructive and not executed: python -c "open('destructive-marker.tmp', 'w').close()"
+[PASS] a destructive step leaves no trace
+tests/fixtures/expect-fail.md: every step is followable (0 findings).
+[PASS] an expected failure ran and left its marker
+tests/fixtures/manual-gate.md: 1 finding(s).
+[info] step 2 (Verify the push landed, against the remote rather than the local pointer): COMMAND_DEFERRED_MANUAL_GATE - not executed: this step waits on step 1, which a human completes and this check cannot observe
+[PASS] a gated step is reported, not executed
+tests/fixtures/bad-manual-gate.md: 1 finding(s).
+[error] step 1 (Verify the push landed): MANUAL_GATE_UNRESOLVED - the step waits on step 5, which this document does not contain
+[PASS] a gate naming a missing step exits 1
+tests/fixtures/shell-bash.md: every step is followable (0 findings).
+[PASS] a declared shell ran the commands
+tests/fixtures/shell-unknown.md: 1 finding(s).
+[error] document: SHELL_UNRESOLVED - 'fish' is not a shell this tool knows (bash, Git Bash, pwsh, powershell, cmd), so no command in this document was executed
+[PASS] an unresolved shell exits 1 and runs nothing
+smoke steps failed=0
