@@ -101,7 +101,7 @@ A step marked `Run (destructive):` is **never** executed, with or without `--exe
 python -m unittest discover -s tests -v
 ```
 
-Forty-eight cases, a few of them platform-specific and skipped elsewhere. Every one of the twenty-six that expects a finding asserts its code **and** the step number it must land on (step 0 for a defect in the document itself); the rest test parsing, shell resolution, timeouts and clean runs. The step matters because a suite that only asserts "a finding was produced" also passes on a checker that reports every step as broken.
+A few cases are platform-specific and skipped elsewhere. Every case that expects a finding asserts its code **and** the step number it must land on (step 0 for a defect in the document itself); the rest test parsing, shell resolution, timeouts and clean runs. The step matters because a suite that only asserts "a finding was produced" also passes on a checker that reports every step as broken. To check that claim and print the current counts, run `python docs/plans/evidence/2026-11-03-shell-directive/audit_test_claims.py tests/test_checker.py` from the repository root; it exits `1` if any such case does not assert its step.
 
 Two of them assert a side effect rather than a report: a destructive command must leave **no** marker on disk, and an `expect-fail` command must leave **one**. Without the second, a clean report is indistinguishable from a directive the parser silently ignored. A runbook declaring `Shell:` must leave its marker too, and one whose shell cannot be found must leave none.
 
@@ -204,7 +204,7 @@ Shell: `Git Bash`
 python -m unittest discover -s tests -v
 ```
 
-四十八个用例，其中几个只适用于特定平台，在别的平台上跳过。预期会产生发现的二十六个用例，每一个都同时断言发现代码**和**它必须落在的步骤编号（文档本身的缺陷落在第 0 步）；其余的测试解析、shell 查找、超时和干净的运行。步骤编号之所以要紧，是因为只断言"产生了某个发现"的套件，在一个把每一步都报成坏掉的检查器上也会通过。
+其中几个用例只适用于特定平台，在别的平台上跳过。每一个预期会产生发现的用例，都同时断言发现代码**和**它必须落在的步骤编号（文档本身的缺陷落在第 0 步）；其余的测试解析、shell 查找、超时和干净的运行。步骤编号之所以要紧，是因为只断言"产生了某个发现"的套件，在一个把每一步都报成坏掉的检查器上也会通过。要检查这一点并打印当前的数目，请在仓库根目录运行 `python docs/plans/evidence/2026-11-03-shell-directive/audit_test_claims.py tests/test_checker.py`；只要有这样的用例没有断言步骤编号，它就以 `1` 退出。
 
 其中两个断言的是副作用而不是报告：破坏性命令必须在磁盘上**不留**标记，而 `expect-fail` 命令必须留下**一个**。没有后者，「报告干净」与「解析器默默忽略了这条指令」就分不出来。声明了 `Shell:` 的手册同样必须留下标记，而 shell 找不到的手册必须一个都不留。
 
