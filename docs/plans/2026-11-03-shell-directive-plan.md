@@ -607,10 +607,14 @@ python -m runbook_dry_run "G:/Business/AI/Learnings/Publish-runbook-dry-run-Proc
 3. Task 8 on the real procedure: three false `COMMAND_FAILED` gone with the line, present without it.
 4. CI is not run (nothing is pushed); the two new smoke steps are exercised locally in Task 5.
 
+> **Corrected 2026-11-04 (publish)** — item 4 was true when written and is no longer. On Yan's go, `main` and the annotated tag `v0.3.0` were pushed to https://github.com/teageryc/runbook-dry-run on 2026-11-04, both at `cf8d7f2`. The first CI run, 41879067288, ran on that commit from 17:37:40Z to 17:46:03Z and completed with conclusion `success`, 5 of 5 jobs: `tests` on windows-latest and ubuntu-latest with Python 3.11 and 3.13, and `smoke`. Command: `curl -s https://api.github.com/repos/teageryc/runbook-dry-run/actions/runs/41879067288/jobs`.
+
 ## After this plan (not part of it)
 
 - Checkpoint capture in `G:\Business\AI` once lane ai-0a's KL-0236..0239 commit has landed: re-read the Next-ID counter, one entry (KL-0240 or later) resolving KL-0122 and recording Yan's 2026-11-03 picks; announce exact paths to live lanes before staging.
 - Ask Yan whether and when to publish the repository (no remote-tracking branch exists locally; `gh` as `teagerca-prog` cannot see `teageryc/runbook-dry-run`).
+
+> **Corrected 2026-11-04 (publish)** — the last bullet is answered: Yan said to publish, and the repository went public on 2026-11-04 (see the correction under Verification). `origin/main` now exists locally. Now that the repository is public, `gh` as `teagerca-prog` can read it but still cannot push: `gh api repos/teageryc/runbook-dry-run --jq .permissions` prints `"pull":true` and `"push":false`.
 
 ## Deviations during execution
 
