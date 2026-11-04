@@ -331,6 +331,28 @@ class ShellDirective(unittest.TestCase):
         self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 1))
         self.assertIn("exited 3: 丁", findings[0].detail)
 
+    @unittest.skipUnless(sys.platform == "win32", "the console code page is a Windows fact")
+    def test_cmd_output_is_read_in_the_console_code_page(self):
+        """cmd.exe writes into a pipe in the console's code page, not the ANSI one Python assumes.
+
+        Measured on the machine this was built on: console 65001, Python's default cp1252.
+        """
+        text = one_step("", "Run: `echo Schlüssel 1>&2 & exit /b 3`")
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 1))
+        self.assertIn("exited 3: Schlüssel", findings[0].detail)
+
+    @unittest.skipUnless(
+        sys.platform == "win32" and shutil.which("pwsh"), "pwsh on Windows is not installed"
+    )
+    def test_pwsh_output_is_read_in_the_console_code_page(self):
+        text = one_step(
+            "Shell: `pwsh`", "Run: `[Console]::Error.WriteLine('Schlüssel'); exit 3`"
+        )
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 1))
+        self.assertIn("exited 3: Schlüssel", findings[0].detail)
+
     @unittest.skipUnless(shutil.which("pwsh"), "pwsh is not installed")
     def test_a_declared_pwsh_runs_the_command_in_pwsh(self):
         findings = check(

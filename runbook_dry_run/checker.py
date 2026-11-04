@@ -7,6 +7,7 @@ step it belongs to, because "this runbook has a broken path" is not actionable a
 
 from __future__ import annotations
 
+import codecs
 import functools
 import locale
 import os
@@ -121,8 +122,9 @@ class Launcher:
     MSVC rules and Git Bash's runtime by its own, so a backslash pair before a
     quote arrived halved. An environment variable is never re-parsed.
 
-    `encoding` is how the shell's output is decoded; None means the locale's.
-    Git Bash writes UTF-8, which the Windows ANSI code page cannot always decode.
+    `encoding` is how the shell's output is decoded. None means the console's
+    output code page on Windows, which cmd.exe and PowerShell write in, and the
+    locale's elsewhere. Git Bash writes UTF-8 whatever the console says.
     """
 
     argv: tuple[str, ...] = ()
@@ -429,7 +431,7 @@ def _run(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            encoding=launcher.encoding,
+            encoding=launcher.encoding or _console_encoding(),
             errors="replace",
             **platform,
         )
@@ -476,8 +478,29 @@ def _windows_api():
     kernel32.TerminateJobObject.restype = wintypes.BOOL
     kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.GetConsoleOutputCP.restype = wintypes.UINT
+    kernel32.GetConsoleOutputCP.argtypes = []
     ntdll.NtResumeProcess.argtypes = [wintypes.HANDLE]
     return kernel32, ntdll
+
+
+def _console_encoding() -> str | None:
+    """How cmd.exe and PowerShell write into a pipe: the console's output code page.
+
+    It is not the ANSI code page Python decodes with by default, and it depends on
+    where the checker was started: measured 65001 under one shell and 437 under
+    another, against Python's cp1252. A checker with no console gives its child a
+    new one, in the OEM code page. None (the locale's) everywhere but Windows.
+    """
+    if sys.platform != "win32":
+        return None
+    page = _windows_api()[0].GetConsoleOutputCP()
+    encoding = f"cp{page}" if page else "oem"
+    try:
+        codecs.lookup(encoding)
+    except LookupError:
+        return None
+    return encoding
 
 
 def _new_job():

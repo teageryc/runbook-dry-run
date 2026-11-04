@@ -59,6 +59,10 @@ was reproduced, then fixed test-first.
 - Bash receives its command in an environment variable: as an argument, a
   backslash pair before a quote arrived halved.
 - Git Bash output is decoded as UTF-8, and no output can raise a decode error.
+  `cmd.exe` and PowerShell output is decoded in the console's output code page,
+  which they write in, instead of the ANSI one: measured 65001 under one shell and
+  437 under another, against Python's cp1252, and a non-ASCII error read wrongly
+  under both.
 - A `Shell:` line inside a step, or a second conflicting one, is refused instead
   of silently dropped.
 - `Runbook`'s new fields, `shell_declarations` and `shell_in_steps`, are appended
