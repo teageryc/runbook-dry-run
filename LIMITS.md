@@ -36,6 +36,12 @@
 
 **A runbook that declares no shell is checked in mine, and I say nothing about it.** *(Added 2026-11-03, v0.3.)* Without a `Shell:` line I use the platform default - `cmd.exe` on Windows - and add no finding, because a finding on every existing runbook would be noise. A bash runbook checked on Windows without the line still fails in exactly the way that made this directive necessary; the only defence is to declare it.
 
+**I do not know what a fenced code block is.** *(Added 2026-11-03, v0.3.)* A line inside a fenced code block is read like any other line. A `Run:` line shown there as an example is a command, and `--execute` runs it; a `Shell:` line shown there inside a step refuses the whole document. A line that starts with a space is never read as a directive, so indent an example, or change its directive word.
+
+**A document-level line written inside a step is ignored.** *(Added 2026-11-03, v0.3.)* `Working directory:` and `Elements:` belong before the first step. Written inside one, they are dropped without a word, and that step's paths still resolve from the document's working directory. Only `Shell:` is refused there, because ignoring it would change the shell every command runs in.
+
+**A command that changes the console's code page is read in the old one.** *(Added 2026-11-03, v0.3.)* On Windows I read `cmd.exe` and PowerShell output in the console's output code page as it was when the command started. A command that runs `chcp` changes the page its own later output arrives in, and a non-ASCII detail then reads wrongly; the exit code and the finding do not change.
+
 **It cannot judge a step that requires a human decision.** "Compare the two figures and decide whether to proceed" is checkable only for its failure branch. Whether the reader can actually make that judgement is exactly what a walk-through is for, and that is the thing I most want to be understood as not replacing.
 
 ---
@@ -73,5 +79,11 @@
 **在 PowerShell 下，我读到的退出码是 PowerShell 的总结，不是命令自己的。**（2026-11-03 补记，v0.3）`-Command` 会把最后一条语句的任何失败压成 `1`——连原生程序自己的代码也一样——并把先失败后成功报成 `0`。要让原生程序自己的退出码传出来，就在它的命令末尾加 `; exit $LASTEXITCODE`。但绝不能加在 cmdlet 之后：`$LASTEXITCODE` 只跟踪原生程序，于是一个失败的 cmdlet 到达时会变成 `0`，或者变成更早某个原生程序的代码。失败的 cmdlet 应声明为 `Run (expect-fail: 1):`，不加这个结尾。
 
 **没有声明 shell 的手册，是在我的默认 shell 里检查的，而我对此一言不发。**（2026-11-03 补记，v0.3）没有 `Shell:` 行时，我用平台默认 shell——Windows 上是 `cmd.exe`——而且不加任何发现，因为对每一份现有手册都报的发现就是噪音。一份为 bash 写的手册，在 Windows 上不带这一行检查，仍然会以当初促成这条指令的那种方式失败；唯一的防线是把它声明出来。
+
+**我不知道什么是围栏代码块。**（2026-11-03 补记，v0.3）围栏代码块里的一行，和别的行一样被读取。作为示例写在那里的 `Run:` 行就是一条命令，`--execute` 会运行它；写在某个步骤里的示例 `Shell:` 行会让整份文档被拒绝。以空格开头的行永远不会被读成指令，所以请把示例缩进，或者改掉它的指令词。
+
+**写在步骤里的文档级行会被忽略。**（2026-11-03 补记，v0.3）`Working directory:` 和 `Elements:` 应该写在第一步之前。写在某一步里时，它们会被悄无声息地丢掉，那一步的路径仍然从文档的工作目录解析。只有 `Shell:` 写在那里会被拒绝，因为忽略它会改变每一条命令运行所用的 shell。
+
+**改变控制台代码页的命令，会按旧代码页读取。**（2026-11-03 补记，v0.3）在 Windows 上，我按命令启动时控制台的输出代码页读取 `cmd.exe` 和 PowerShell 的输出。一条运行了 `chcp` 的命令会改变它自己后续输出所用的代码页，于是非 ASCII 的细节会读错；退出码和发现不受影响。
 
 **它无法判断需要人做决定的步骤。**「比较两个数字并决定是否继续」——我只能检查它的失败分支。读者是否真的做得出那个判断，恰恰是走一遍流程要回答的问题，而这正是我最希望被理解为"本工具不替代"的那件事。
