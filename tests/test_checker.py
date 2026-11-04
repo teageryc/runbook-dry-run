@@ -648,11 +648,16 @@ class UnresolvedShell(unittest.TestCase):
         )
 
     def test_two_different_shells_are_refused(self):
-        text = one_step("Shell: `bash`\nShell: `pwsh`", "Run: `exit 0`")
+        """Refused means not run: a command that succeeds anywhere cannot show that."""
+        command = f"\"{sys.executable}\" -c \"open('shell-unknown-marker.tmp', 'w').close()\""
+        text = one_step("Shell: `bash`\nShell: `pwsh`", f"Run: `{command}`")
         findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
         self.assertEqual({"SHELL_UNRESOLVED"}, codes_at(findings, 0))
         self.assertEqual(1, len(findings), msg=f"expected exactly one: {findings}")
         self.assertIn("more than once", findings[0].detail)
+        self.assertFalse(
+            os.path.exists(self.MARKERS[0]), "a command ran despite conflicting Shell: lines"
+        )
 
     def test_two_names_for_the_same_shell_are_not_a_conflict(self):
         text = one_step("Shell: `Git Bash`\nShell: `bash`", "Run: `[[ -n \"$BASH_VERSION\" ]]`")
