@@ -11,7 +11,6 @@ import functools
 import locale
 import os
 import re
-import signal
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -388,20 +387,19 @@ def _run(
         env = {**os.environ, COMMAND_VARIABLE: command}
     else:
         args = [*launcher.argv, command]
-    # A timeout must stop everything the command started, not only its first
-    # process: Git Bash's bin/bash.exe is a launcher whose real bash is a second
-    # process, and cmd.exe or bash may start the program that holds the output
-    # pipes. Reading those pipes waits for the whole tree, so a command that never
-    # ends would hang the checker. POSIX: the command leads its own process group.
-    # Windows: it starts suspended inside a Job Object, which also holds every
-    # process it starts later - even when an intermediate MSYS process has exited
-    # and broken the parent chain, which defeats any walk by parent id.
+    # Windows: a timeout must stop everything the command started, not only its
+    # first process. Git Bash's bin/bash.exe is a launcher whose real bash is a
+    # second process, and cmd.exe may start the program that holds the output
+    # pipes; reading those pipes waits for the whole tree, so a command that never
+    # ended hung the checker. The command starts suspended inside a Job Object,
+    # which also holds every process it starts later - even when an intermediate
+    # MSYS process has exited and broken the parent chain, which defeats any walk
+    # by parent id.
+    # POSIX: the command stays in the checker's own session and process group, as
+    # in v0.2, so a terminal prompt and Ctrl+C still reach it. The hang never
+    # happened there: after a kill, only the process is waited for, not the pipes.
     job = _new_job() if sys.platform == "win32" else None
-    platform = (
-        {"creationflags": _CREATE_SUSPENDED}
-        if sys.platform == "win32"
-        else {"start_new_session": True}
-    )
+    platform = {"creationflags": _CREATE_SUSPENDED} if sys.platform == "win32" else {}
     try:
         proc = subprocess.Popen(
             args,
@@ -426,11 +424,14 @@ def _run(
         stdout, stderr = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         _kill_tree(proc, job)
-        try:
-            proc.communicate(timeout=10)
-        except subprocess.TimeoutExpired:  # pragma: no cover - a tree that would not die
-            pass
+        _reap(proc)
         return 124, f"timed out after {timeout:g}s"
+    except BaseException:
+        # subprocess.run, which this replaced, kills the command on any exception:
+        # an interrupted checker must not leave it running unreported.
+        _kill_tree(proc, job)
+        _reap(proc)
+        raise
     finally:
         _close_job(job)
     detail = (stderr or stdout or "").strip().splitlines()
@@ -485,15 +486,28 @@ def _assign_and_resume(job, proc: subprocess.Popen):
 
 
 def _kill_tree(proc: subprocess.Popen, job) -> None:
-    """Kill a timed-out command and everything it started."""
+    """Kill a command: on Windows with everything it started, elsewhere its first process."""
     if job is not None:
         _windows_api()[0].TerminateJobObject(job, 1)
-    elif sys.platform != "win32":
-        try:
-            os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
     proc.kill()
+
+
+def _reap(proc: subprocess.Popen) -> None:
+    """Collect a killed command without waiting long on anything it left behind.
+
+    Windows: a read bounded at 10 s, for a program that escaped the job and still
+    holds the pipes. POSIX: the process only, then the pipes are closed - what
+    subprocess.run does, and why a timeout never hung there.
+    """
+    if sys.platform == "win32":
+        try:
+            proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:  # pragma: no cover - a tree that would not die
+            pass
+    else:
+        proc.wait()
+        for stream in (proc.stdout, proc.stderr):
+            stream.close()
 
 
 def _gate_defect(step: Step, step_numbers: set[int]) -> Finding | None:

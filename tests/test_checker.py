@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -448,6 +449,63 @@ class Timeouts(unittest.TestCase):
         self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 1))
         self.assertIn("timed out", findings[0].detail)
         self.assertLess(elapsed, 7, f"the timeout did not stop the command ({elapsed:.1f}s)")
+
+
+class ProcessPlacement(unittest.TestCase):
+    """v0.2 ran every command in the checker's own session and process group.
+
+    That is what lets a terminal prompt (sudo, ssh) and Ctrl+C reach the command,
+    and an outer `timeout` or CI cancel stop it. A runbook is promised that
+    behaviour whether or not it declares a shell.
+    """
+
+    MARKER = os.path.join(REPO_ROOT, "interrupted-marker.tmp")
+
+    def setUp(self):
+        if os.path.exists(self.MARKER):
+            os.remove(self.MARKER)
+
+    tearDown = setUp
+
+    @unittest.skipIf(sys.platform == "win32", "process groups are POSIX")
+    def test_a_command_runs_in_the_checkers_own_process_group(self):
+        probe = (
+            f'"{sys.executable}" -c "import os, sys; '
+            f'sys.exit(0 if os.getpgid(0) == {os.getpgid(0)} else 1)"'
+        )
+        for shell_line in ("", "Shell: `bash`"):
+            with self.subTest(shell_line=shell_line or "undeclared"):
+                text = one_step(shell_line, f"Run: `{probe}`")
+                findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+                self.assertEqual([], findings, msg=f"unexpected findings: {findings}")
+
+    def test_an_interrupted_check_stops_the_command(self):
+        """subprocess.run killed the child on any exception; _run must too."""
+        command = (
+            f'"{sys.executable}" -c "import time; time.sleep(2); '
+            "open('interrupted-marker.tmp', 'w').close()\""
+        )
+        text = one_step("", f"Run: `{command}`")
+        real_communicate = subprocess.Popen.communicate
+        interrupted = []
+
+        def ctrl_c_once(proc, *args, **kwargs):
+            """Ctrl+C arrives while the first read waits; later reads work."""
+            if not interrupted:
+                interrupted.append(proc)
+                raise KeyboardInterrupt
+            return real_communicate(proc, *args, **kwargs)
+
+        with mock.patch.object(
+            subprocess.Popen, "communicate", autospec=True, side_effect=ctrl_c_once
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertEqual(1, len(interrupted), "the interruption never reached the command")
+        time.sleep(4)
+        self.assertFalse(
+            os.path.exists(self.MARKER), "the command kept running after the check was interrupted"
+        )
 
 
 class CommandsThatCannotStart(unittest.TestCase):

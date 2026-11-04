@@ -143,7 +143,9 @@ A code review of v0.3, run before the release rather than after it, reported fif
 
 **The command reaches bash in an environment variable.** Passed as an argument, the command crossed two parsers: Windows builds the command line by MSVC rules and Git Bash's runtime splits it by its own, so a backslash pair before a quote arrived halved — `x='a\\'` measured length 2 instead of 3. Bash now receives a fixed argument, `eval "$RUNBOOK_DRY_RUN_COMMAND"`, and the command travels in that variable, which nothing re-parses.
 
-**A timeout stops the whole command, not only its first process.** Measured before the fix: a 2-second timeout took 10.3 seconds under `Shell: Git Bash`, and so did a `cmd.exe` command whose program was a grandchild — a pre-existing defect that Git Bash's launcher stub made universal. Two obvious fixes were measured and rejected: `taskkill /T` cannot start while the output pipes are being read (12 to 16 seconds measured), and a walk by parent process id never finds the program, because an MSYS fork that has exited breaks the parent chain. On Windows the command now starts suspended inside a Job Object that is terminated on timeout; on POSIX it leads its own process group.
+**On Windows, a timeout stops the whole command, not only its first process.** Measured before the fix: a 2-second timeout took 10.3 seconds under `Shell: Git Bash`, and so did a `cmd.exe` command whose program was a grandchild — a pre-existing defect that Git Bash's launcher stub made universal. Two obvious fixes were measured and rejected: `taskkill /T` cannot start while the output pipes are being read (12 to 16 seconds measured), and a walk by parent process id never finds the program, because an MSYS fork that has exited breaks the parent chain. The command now starts suspended inside a Job Object that is terminated on timeout. On POSIX the command stays where v0.2 put it, in the checker's own session and process group. The hang never happened there, because after a kill only the process is waited for, not its pipes; a timeout stops the command's first process, as it always did.
+
+> **Corrected 2026-11-03 (second review)** — this paragraph first said that on POSIX the command leads its own process group. That was built, then reverted before release on Yan's ruling: a new session took the terminal away from every command, so `sudo` and `ssh` could no longer prompt and Ctrl+C no longer reached it — a change that §3 and §8 promise a runbook without `Shell:` never sees — to fix a hang that had been measured only on Windows.
 
 **The PowerShell ending applies to native programs only.** Measured through the tool's own launcher on PowerShell 7: `cmd /c exit 7` arrives as `1`, and with `; exit $LASTEXITCODE` as `7`; a failing `Get-Item` arrives as `1`, but with the ending as `0`, and after an earlier `cmd /c exit 5` as `5`. A failing cmdlet is therefore declared `Run (expect-fail: 1):` with no ending.
 
@@ -290,7 +292,9 @@ v0.3 的一次代码审查是在发布之前、而不是之后做的，报告了
 
 **命令通过环境变量交给 bash。** 作为参数传递时，命令要经过两个解析器：Windows 按 MSVC 规则拼接命令行，Git Bash 的运行时按自己的规则拆分，于是引号前成对的反斜杠到达时被减半——`x='a\\'` 实测长度是 2 而不是 3。现在 bash 收到的是一个固定参数 `eval "$RUNBOOK_DRY_RUN_COMMAND"`，命令放在这个变量里传递，没有任何东西会重新解析它。
 
-**超时会停下整条命令，而不只是它的第一个进程。** 修复前实测：在 `Shell: Git Bash` 下，2 秒的超时用了 10.3 秒；一条程序是孙进程的 `cmd.exe` 命令也一样——这是一个早已存在的缺陷，Git Bash 的启动器使它变得无处不在。两种显而易见的修法都实测过并被否决：读取输出管道期间，`taskkill /T` 根本启动不了（实测 12 到 16 秒）；按父进程号遍历永远找不到那个程序，因为一个已经退出的 MSYS fork 进程会让父子链断开。现在在 Windows 上，命令以挂起状态在一个作业对象（Job Object）里启动，超时时终止整个作业；在 POSIX 上，命令自成一个进程组。
+**在 Windows 上，超时会停下整条命令，而不只是它的第一个进程。** 修复前实测：在 `Shell: Git Bash` 下，2 秒的超时用了 10.3 秒；一条程序是孙进程的 `cmd.exe` 命令也一样——这是一个早已存在的缺陷，Git Bash 的启动器使它变得无处不在。两种显而易见的修法都实测过并被否决：读取输出管道期间，`taskkill /T` 根本启动不了（实测 12 到 16 秒）；按父进程号遍历永远找不到那个程序，因为一个已经退出的 MSYS fork 进程会让父子链断开。现在命令以挂起状态在一个作业对象（Job Object）里启动，超时时终止整个作业。在 POSIX 上，命令留在 v0.2 放它的地方，即检查器自己的会话和进程组里。那里从来没有卡住过，因为杀掉之后只等进程，不等它的管道；超时停下的是命令的第一个进程，一向如此。
+
+> **更正于 2026-11-03（第二轮审查）**——本段原先说，在 POSIX 上命令自成一个进程组。这一点做出来了，又在发布之前按 Yan 的裁决撤回：新会话让每一条命令都失去了终端，于是 `sudo` 和 `ssh` 无法再提示输入，Ctrl+C 也到不了命令——而第三节和第八节承诺，没有 `Shell:` 的手册永远不会遇到这种变化——为的却是修一个只在 Windows 上测到过的卡死。
 
 **PowerShell 的那个结尾只适用于原生程序。** 在 PowerShell 7 上通过本工具自己的启动方式实测：`cmd /c exit 7` 到达时是 `1`，加上 `; exit $LASTEXITCODE` 是 `7`；失败的 `Get-Item` 到达时是 `1`，加上这个结尾却是 `0`，如果前面运行过 `cmd /c exit 5` 则是 `5`。因此失败的 cmdlet 应声明为 `Run (expect-fail: 1):`，不加这个结尾。
 

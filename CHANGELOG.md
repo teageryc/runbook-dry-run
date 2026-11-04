@@ -46,10 +46,14 @@ the document declared Git Bash in its header, and the format could not say so.
 Found by a code review of this release before it shipped (spec section 9); each
 was reproduced, then fixed test-first.
 
-- A timeout now stops the whole command tree. A 2-second timeout took 10.3 seconds
-  under Git Bash, and under `cmd.exe` whenever the program was a grandchild - the
-  second case predates this release. Windows uses a Job Object; POSIX a process
-  group.
+- On Windows, a timeout now stops the whole command tree. A 2-second timeout took
+  10.3 seconds under Git Bash, and under `cmd.exe` whenever the program was a
+  grandchild - the second case predates this release. The command runs inside a
+  Job Object. On POSIX, where the timeout never hung, commands stay in the
+  checker's own session and process group, as in 0.2, so terminal prompts and
+  Ctrl+C still reach them.
+- An interrupted check (Ctrl+C) stops the running command instead of leaving it
+  running unreported.
 - Shell resolution no longer searches the current directory, where a planted
   `git.bat` was executed - even without `--execute`.
 - Bash receives its command in an environment variable: as an argument, a
