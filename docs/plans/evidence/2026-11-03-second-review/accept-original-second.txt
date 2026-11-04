@@ -1,0 +1,6 @@
+G:/Business/AI/Learnings/Publish-runbook-dry-run-Procedure-2026-09-12.md: 5 finding(s).
+[error] step 1 (Stand in the artifact repository and confirm it is the right one): COMMAND_FAILED - cd /g/Projects/runbook-dry-run && git log --oneline -1 exited 1: The system cannot find the path specified.
+[error] step 2 (Confirm nothing is uncommitted): COMMAND_FAILED - cd /g/Projects/runbook-dry-run && git diff --quiet && git diff --cached --quiet exited 1: The system cannot find the path specified.
+[error] step 3 (Confirm the suite is green before it is public): COMMAND_FAILED - cd /g/Projects/runbook-dry-run && python -m unittest discover -s tests exited 1: The system cannot find the path specified.
+[info] step 6 (Push): COMMAND_SKIPPED_DESTRUCTIVE - marked destructive and not executed: cd /g/Projects/runbook-dry-run && git push -u --follow-tags origin main
+[info] step 7 (Verify the push landed, against the remote rather than the local pointer): COMMAND_DEFERRED_MANUAL_GATE - not executed: this step waits on step 6, which a human completes and this check cannot observe
