@@ -9,9 +9,11 @@ from runbook_dry_run import checker  # noqa: E402
 original_kill = checker._kill_tree
 
 
-def timed_kill(proc):
+def timed_kill(proc, *rest):
+    # *rest: _kill_tree took (proc) when this was first run and (proc, job) from
+    # 9221eb9 on; passing it through keeps the probe runnable on every commit.
     started = time.monotonic()
-    original_kill(proc)
+    original_kill(proc, *rest)
     print(f"   _kill_tree took {time.monotonic() - started:.1f}s; poll={proc.poll()}")
 
 
