@@ -8,6 +8,7 @@ step it belongs to, because "this runbook has a broken path" is not actionable a
 from __future__ import annotations
 
 import functools
+import locale
 import os
 import re
 import signal
@@ -45,6 +46,7 @@ _SHELL_KEYS = {name.casefold(): shell for name, shell in SHELL_NAMES.items()}
 KNOWN_SHELLS = ", ".join(SHELL_NAMES)
 POWERSHELL_FLAGS = ("-NoProfile", "-NonInteractive", "-Command")
 COMMAND_VARIABLE = "RUNBOOK_DRY_RUN_COMMAND"
+GIT_PROBE_TIMEOUT = 30.0
 
 # Documented in docs/specs/2026-09-12-runbook-dry-run-design.md, section 4.
 FINDING_CODES = {
@@ -281,12 +283,27 @@ def _git_bash() -> tuple[str | None, str]:
     if git is None:
         return None, "Git Bash is looked for through git's installation, and git is not on PATH"
     try:
-        probe = subprocess.run(
-            [git, "--exec-path"], capture_output=True, text=True, timeout=30
+        probe = subprocess.Popen(
+            [git, "--exec-path"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return None, f"git --exec-path did not answer: {exc}"
-    start = probe.stdout.strip()
+    except (OSError, ValueError) as exc:
+        return None, f"git --exec-path did not start: {exc}"
+    try:
+        raw, _ = probe.communicate(timeout=GIT_PROBE_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        # Bounded twice: a git that is really a wrapper can leave a child holding
+        # the pipe after it is killed, and an unbounded read would wait for it.
+        probe.kill()
+        try:
+            probe.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass
+        return None, f"git --exec-path did not answer within {GIT_PROBE_TIMEOUT:g}s"
+    # git prints its path in UTF-8; the ANSI code page cannot decode every one.
+    try:
+        start = raw.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        start = raw.decode(locale.getpreferredencoding(False), errors="replace").strip()
     if probe.returncode != 0:
         return None, f"git --exec-path exited {probe.returncode}"
     if not start:

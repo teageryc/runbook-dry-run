@@ -19,6 +19,7 @@ FIXTURES = os.path.join(REPO_ROOT, "tests", "fixtures")
 sys.path.insert(0, REPO_ROOT)
 
 from runbook_dry_run.checker import (  # noqa: E402
+    _git_bash,
     Launcher,
     Runbook,
     Step,
@@ -362,6 +363,53 @@ class ShellResolution(unittest.TestCase):
             launcher, reason = resolve_shell("bash")
         self.assertIsNone(launcher)
         self.assertIn("git", reason)
+
+    @staticmethod
+    def _fake_git(root: str, python_code: str) -> str:
+        """A git.bat whose --exec-path answer is whatever `python_code` does.
+
+        The .bat stays ASCII: cmd.exe reads a batch file in the console code page.
+        """
+        fake = os.path.join(root, "git.bat")
+        with open(fake, "w", encoding="ascii") as handle:
+            handle.write(f'@"{sys.executable}" -c "{python_code}"\r\n')
+        return fake
+
+    @unittest.skipUnless(sys.platform == "win32", "the Git Bash lookup is Windows-only")
+    def test_a_git_installed_under_a_non_ascii_folder_is_found(self):
+        """git prints its exec path in UTF-8, which the ANSI code page cannot always decode."""
+        with tempfile.TemporaryDirectory() as root:
+            install = os.path.join(root, "丁", "Git")
+            exec_path = os.path.join(install, "mingw64", "libexec", "git-core")
+            os.makedirs(exec_path)
+            os.makedirs(os.path.join(install, "bin"))
+            bash = os.path.join(install, "bin", "bash.exe")
+            open(bash, "wb").close()
+            answer = os.path.join(root, "exec-path.txt")
+            with open(answer, "wb") as handle:
+                handle.write(exec_path.replace(os.sep, "/").encode("utf-8") + b"\n")
+            fake = self._fake_git(
+                root, f"import sys; sys.stdout.buffer.write(open(r'{answer}', 'rb').read())"
+            )
+            with mock.patch("runbook_dry_run.checker._on_path", return_value=fake):
+                found, problem = _git_bash()
+        self.assertEqual("", problem)
+        self.assertEqual(os.path.normcase(bash), os.path.normcase(found))
+
+    @unittest.skipUnless(sys.platform == "win32", "the Git Bash lookup is Windows-only")
+    def test_a_git_that_never_answers_is_given_up_on(self):
+        """The real program is cmd.exe's child and holds the pipe after cmd.exe is killed."""
+        with tempfile.TemporaryDirectory() as root:
+            fake = self._fake_git(root, "import time; time.sleep(25)")
+            started = time.monotonic()
+            with mock.patch("runbook_dry_run.checker._on_path", return_value=fake), mock.patch(
+                "runbook_dry_run.checker.GIT_PROBE_TIMEOUT", 1
+            ):
+                found, problem = _git_bash()
+            elapsed = time.monotonic() - started
+        self.assertIsNone(found)
+        self.assertIn("did not answer", problem)
+        self.assertLess(elapsed, 12, f"the probe waited {elapsed:.1f}s for a git that never answers")
 
     @unittest.skipUnless(sys.platform == "win32", "cmd exists only on Windows")
     def test_cmd_on_windows_is_the_platform_default(self):
