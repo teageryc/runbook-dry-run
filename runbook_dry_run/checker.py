@@ -138,9 +138,16 @@ class Runbook:
     steps: list[Step] = field(default_factory=list)
     # Fields added after 0.2 go below this line: Runbook is public API, and a field
     # inserted above shifts every positional argument written against 0.2.
-    shell: str | None = None
     shell_declarations: list[str] = field(default_factory=list)
     shell_in_steps: list[int] = field(default_factory=list)
+
+    @property
+    def shell(self) -> str | None:
+        """The shell the document declares: its first `Shell:` line, or None.
+
+        Read-only and derived, so it cannot disagree with `shell_declarations`.
+        """
+        return self.shell_declarations[0] if self.shell_declarations else None
 
 
 def _first_backticked(value: str) -> str:
@@ -192,8 +199,6 @@ def parse(text: str) -> Runbook:
             if shell:
                 declared = _first_backticked(shell.group(1))
                 book.shell_declarations.append(declared)
-                if book.shell is None:
-                    book.shell = declared
                 in_elements = False
                 continue
             if ELEMENTS_HEADING.match(line):

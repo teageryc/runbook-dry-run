@@ -266,6 +266,14 @@ class ShellDirective(unittest.TestCase):
         with open(os.path.join(FIXTURES, "good.md"), encoding="utf-8") as handle:
             self.assertIsNone(parse(handle.read()).shell)
 
+    def test_the_shell_is_read_from_the_declarations_and_cannot_disagree(self):
+        """check() reads both; two writable copies of one fact let a caller split them."""
+        book = parse(one_step("Shell: `bash`\nShell: `Git Bash`", "Run: `exit 0`"))
+        self.assertEqual("bash", book.shell)
+        with self.assertRaises(AttributeError):
+            book.shell = "pwsh"
+        self.assertEqual("pwsh", Runbook(shell_declarations=["pwsh"]).shell)
+
     def test_a_runbook_built_positionally_against_0_2_still_lines_up(self):
         """Runbook is public API; a new field goes at the END, never in the middle."""
         step = Step(number=1, title="t", failure_branch="stop.")

@@ -61,8 +61,10 @@ was reproduced, then fixed test-first.
 - Git Bash output is decoded as UTF-8, and no output can raise a decode error.
 - A `Shell:` line inside a step, or a second conflicting one, is refused instead
   of silently dropped.
-- `Runbook.shell` is appended after the 0.2 fields, so positional construction
-  written against 0.2 still lines up.
+- `Runbook`'s new fields, `shell_declarations` and `shell_in_steps`, are appended
+  after the 0.2 fields, so positional construction written against 0.2 still
+  lines up. `Runbook.shell` is a read-only property, the first declaration, so it
+  cannot disagree with them.
 - `runbook_dry_run.__version__` read `0.1.0` through the 0.2.0 release; it now
   matches this changelog.
 
