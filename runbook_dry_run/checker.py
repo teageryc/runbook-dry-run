@@ -334,12 +334,23 @@ def _unknown_shell(declared: str) -> str:
     return f"{declared.strip()!r} is not a shell this tool knows ({KNOWN_SHELLS})"
 
 
+def _has_runnable_commands(step: Step) -> bool:
+    """Run: and expect-fail commands; destructive ones never run anywhere."""
+    return bool(step.commands or step.expect_fail_commands)
+
+
+def _executes(step: Step) -> bool:
+    """Whether --execute runs the step's commands: a gated step's never run.
+
+    The single rule for both check()'s loop and the decision to resolve a shell,
+    so the two cannot drift apart.
+    """
+    return not step.manual_gate_declared
+
+
 def _has_commands_to_run(book: Runbook) -> bool:
-    """Whether --execute would run anything: gated and destructive commands never run."""
-    return any(
-        not step.manual_gate_declared and (step.commands or step.expect_fail_commands)
-        for step in book.steps
-    )
+    """Whether --execute would run anything."""
+    return any(_executes(step) and _has_runnable_commands(step) for step in book.steps)
 
 
 def resolve_shell(declared: str) -> tuple[Launcher | None, str]:
@@ -677,8 +688,8 @@ def check(
         # a human act this check cannot perform and cannot observe. Running them
         # anyway would report a failure that is not a defect in the procedure, and
         # a finding that is noise is a finding readers learn to silence.
-        if step.manual_gate_declared:
-            if gate_defect is None and (step.commands or step.expect_fail_commands):
+        if not _executes(step):
+            if gate_defect is None and _has_runnable_commands(step):
                 findings.append(
                     Finding(
                         step.number,
