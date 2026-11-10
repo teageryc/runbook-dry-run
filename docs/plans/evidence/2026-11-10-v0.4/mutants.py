@@ -1,13 +1,16 @@
-"""v0.4 mutation controls: each mutant must turn every test named for it red.
+"""v0.4 mutation controls: each mutant must make every test named for it FAIL.
 
     python -I -X utf8 docs/plans/evidence/2026-11-10-v0.4/mutants.py
 
 Windows only (mutants 5, 5b and 6 touch the console). Exit 0 only if every mutant
-is killed; exit 2 if a named test fails unmutated (the control). Run from Git Bash:
-mutant 6 is killable only from a console that starts in a page other than 65001.
+is killed; exit 2 if the control fails. Run from Git Bash: mutant 6 is killable
+only from a console that starts in a page other than 65001.
 
-Two kinds of mutant: an attribute of the checker module replaced, or the checker's
-source edited at an anchor that must occur exactly once and run as the module.
+Two kinds of mutant: an attribute of a module replaced, or the checker's source
+edited at an anchor that must occur exactly once and run as the module. The
+control runs every named test unmutated twice: as imported, and through the
+source path with no edit, so a break in that path cannot pass for a kill. Only
+assertion failures count as kills; an error is reported as not killed.
 Mutants A to K are the first review's surviving source mutants, re-made here.
 """
 
@@ -22,9 +25,11 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 sys.path[:0] = [REPO, os.path.join(REPO, "tests")]
 os.chdir(REPO)
 import runbook_dry_run  # noqa: E402
+import runbook_dry_run.__main__ as cli  # noqa: E402
 import runbook_dry_run.checker as checker  # noqa: E402
 import test_checker  # noqa: E402
 
+BS = chr(92)
 SOURCE_PATH = os.path.join(REPO, "runbook_dry_run", "checker.py")
 with open(SOURCE_PATH, encoding="utf-8") as handle:
     SOURCE = handle.read()
@@ -33,13 +38,13 @@ BOUND = ["FINDING_CODES", "Launcher", "Runbook", "Step", "check", "has_errors", 
 
 
 @contextlib.contextmanager
-def attribute(name, value):
-    original = getattr(checker, name)
-    setattr(checker, name, value)
+def attribute(name, value, module=checker):
+    original = getattr(module, name)
+    setattr(module, name, value)
     try:
         yield
     finally:
-        setattr(checker, name, original)
+        setattr(module, name, original)
 
 
 @contextlib.contextmanager
@@ -82,6 +87,10 @@ def closes_only_at_equal_length(line, fence):
     return bool(match) and match.group(1)[0] == fence[0] and len(match.group(1)) == len(fence)
 
 
+def html_block_even_when_it_ends_on_its_line(line):
+    return next((end for start, end in checker.HTML_BLOCKS if start.match(line)), None)
+
+
 @contextlib.contextmanager
 def keep_the_output_page_only():
     """The plan's first design: chcp.com, which reports the input page, still moved."""
@@ -93,6 +102,15 @@ def keep_the_output_page_only():
         kernel32.SetConsoleOutputCP(page)
 
 
+@contextlib.contextmanager
+def printable_regardless_and_never_restored():
+    """The first fix of review finding 2: every stream switched, nothing put back."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="backslashreplace")
+    yield
+
+
 ORIGINAL_RUN = checker._run
 
 
@@ -101,9 +119,11 @@ def run_resetting_the_pages_each_command(*args, **kwargs):
         return ORIGINAL_RUN(*args, **kwargs)
 
 
-FC, FF, UF, DL, CP = ("test_checker." + c + "." for c in (
+STRIP_SPACES_AND_TABS = 'fence_line = physical.rstrip(" ' + BS + 't")'
+FC, FF, UF, DL, CP, FI, CL = ("test_checker." + c + "." for c in (
     "FencedCode", "FencedCodeFindings", "UnclosedFenceStopsCommands",
-    "DocumentLinesInsideAStep", "ConsoleCodePage"))
+    "DocumentLinesInsideAStep", "ConsoleCodePage", "FencesInsideContainers",
+    "CommandLineOutput"))
 MUTANTS = [
     ("1 any fence closes any fence",
      lambda: attribute("_closes_fence", lambda line, fence: bool(checker.FENCE_CLOSE.match(line))),
@@ -113,7 +133,8 @@ MUTANTS = [
     ("3 nothing the fence hid is reported", lambda: attribute("_fence_findings", lambda *a: []),
      [FF + "test_a_fenced_run_is_never_executed_and_the_unfenced_one_is",
       FF + "test_an_unclosed_fence_is_an_error_at_the_step_where_it_opened",
-      FF + "test_a_fenced_shell_line_inside_a_step_no_longer_refuses_the_document"]),
+      FF + "test_a_fenced_shell_line_inside_a_step_no_longer_refuses_the_document",
+      FI + "test_a_fence_closed_less_indented_than_its_opener_is_misaligned"]),
     ("4 a misplaced working directory lets commands run",
      lambda: attribute("_misplaces_directory", lambda book: False),
      [DL + "test_a_working_directory_inside_a_step_stops_every_command"]),
@@ -128,14 +149,55 @@ MUTANTS = [
      [CP + "test_within_the_run_the_new_page_carries_to_the_next_command"]),
     ("7 an unclosed fence lets commands run",
      lambda: attribute("_has_unclosed_fence", lambda book: False),
-     [UF + "test_an_unclosed_fence_stops_every_command",
-      UF + "test_a_fence_left_open_in_a_list_item_runs_neither_command"]),
+     [UF + "test_an_unclosed_fence_stops_every_command"]),
     ("8 a fence closes before a non-breaking space",
-     lambda: source(('fence_line = raw.rstrip(" \\t")', "fence_line = raw.rstrip()")),
+     lambda: source((STRIP_SPACES_AND_TABS, "fence_line = physical.rstrip()")),
      [FC + "test_a_non_breaking_space_after_a_fence_means_it_does_not_close"]),
     ("9 lines split on every Unicode line break",
      lambda: source(("LINE_ENDING.split(text)", "text.splitlines()")),
-     [FC + "test_only_commonmark_line_endings_split_lines"]),
+     [FC + "test_only_commonmark_line_endings_split_lines",
+      FC + "test_a_fence_after_a_line_separator_is_not_a_fence"]),
+    ("10 fence lines keep their trailing whitespace",
+     lambda: source((STRIP_SPACES_AND_TABS, "fence_line = physical")),
+     [FC + "test_a_closing_fence_followed_by_spaces_or_a_tab_still_closes"]),
+    ("11 fence lines lose trailing spaces but not tabs",
+     lambda: source((STRIP_SPACES_AND_TABS, 'fence_line = physical.rstrip(" ")')),
+     [FC + "test_a_closing_fence_followed_by_spaces_or_a_tab_still_closes"]),
+    ("12 a misaligned fence lets commands run",
+     lambda: attribute("_has_misaligned_fence", lambda book: False),
+     [FI + "test_e1_a_list_fence_left_open_then_an_open_example_runs_nothing",
+      FI + "test_e2_a_list_fence_closed_at_column_0_runs_nothing"]),
+    ("13 a misaligned close is not recorded",
+     lambda: source(("                    owner.misaligned_fences.append((fence_opened, "
+                     "SourceLine(number, line)))\n", "                    pass\n")),
+     [FI + "test_a_fence_closed_less_indented_than_its_opener_is_misaligned",
+      FI + "test_e2_a_list_fence_closed_at_column_0_runs_nothing"]),
+    ("14 a fence on a list-marker line is not a fence",
+     lambda: attribute("LIST_FENCE_OPEN", re.compile(r"(?!)")),
+     [FI + "test_f1_a_fence_opened_on_a_list_marker_line_is_a_fence",
+      FI + "test_an_ordered_list_fence_closes_inside_its_item"]),
+    ("15 a list item does not end its fence",
+     lambda: source(("# it (CommonMark); the line itself is read below like any other.\n"
+                     "            fence = None\n",
+                     "# it (CommonMark); the line itself is read below like any other.\n"
+                     "            pass\n")),
+     [FI + "test_a_list_fence_ends_with_its_item"]),
+    ("16 HTML blocks are not recognised", lambda: attribute("_html_block", lambda line: None),
+     [FI + "test_e3_a_fence_line_inside_an_html_comment_is_not_a_fence",
+      FI + "test_a_fence_line_inside_a_pre_block_is_not_a_fence"]),
+    ("17 a one-line HTML comment opens a block",
+     lambda: attribute("_html_block", html_block_even_when_it_ends_on_its_line),
+     [FI + "test_a_one_line_html_comment_opens_no_block"]),
+    ("18 a list item's lines are read from column 0",
+     lambda: source(("inner = fence_line[fence_indent:] if list_fence else fence_line",
+                     "inner = fence_line")),
+     [FI + "test_a_wide_list_marker_reads_the_item_from_its_content_column"]),
+    ("19 a page break before a heading hides the step",
+     lambda: source(("for part in physical.splitlines() or [physical]:", "for part in [physical]:")),
+     [FC + "test_a_form_feed_before_a_heading_still_starts_a_step"]),
+    ("20 the output streams are switched and never put back",
+     lambda: attribute("_printable_output", printable_regardless_and_never_restored, cli),
+     [CL + "test_main_puts_the_streams_back"]),
     ("A a fence opens at any indentation",
      lambda: attribute("FENCE_OPEN", re.compile(r"^\s*(`{3,}|~{3,})(.*)$")),
      [FC + "test_a_four_space_indented_fence_is_not_a_fence"]),
@@ -152,30 +214,32 @@ MUTANTS = [
      lambda: attribute("_opens_fence", opens_without_backticks_in_any_info),
      [FC + "test_a_tilde_fence_may_have_backticks_in_its_info_string"]),
     ("F a fence does not end the Elements inventory",
-     lambda: source(("            fence, fence_opened = opened, SourceLine(number, line)\n"
-                     "            in_elements = False\n",
-                     "            fence, fence_opened = opened, SourceLine(number, line)\n")),
+     lambda: source(("                fence_opened = SourceLine(number, line)\n"
+                     "                in_elements = False\n",
+                     "                fence_opened = SourceLine(number, line)\n")),
      [FC + "test_a_fence_ends_the_elements_inventory"]),
     ("I a fenced Elements: is not recorded",
      lambda: attribute("_READ_LINES", (checker.STEP_HEADING, checker.DIRECTIVE,
                                        checker.WORKING_DIRECTORY, checker.SHELL_LINE)),
      [FC + "test_a_fenced_elements_heading_is_recorded"]),
     ("D fenced lines before the first step are not reported",
-     lambda: source(("            )\n        )\n"
-                     "    findings.extend(_fence_findings(0, \"\", book.fenced_lines, book.unclosed_fence))\n",
+     lambda: source(("            )\n        )\n    findings.extend(\n"
+                     "        _fence_findings(0, \"\", book.fenced_lines, book.unclosed_fence, "
+                     "book.misaligned_fences)\n    )\n",
                      "            )\n        )\n")),
      [FF + "test_fenced_lines_before_the_first_step_are_reported_at_the_document"]),
     ("G a misplaced working directory stops only its own step",
      lambda: source(
-         ("bool(misplaced_shell) or _misplaces_directory(book) or _has_unclosed_fence(book)",
-          "bool(misplaced_shell) or _has_unclosed_fence(book)"),
-         ("        if not execute:\n            continue\n",
+         ("        or _misplaces_directory(book)\n", ""),
+         ("            if not execute:\n                continue\n"
+          if "            if not execute:\n                continue\n" in SOURCE
+          else "        if not execute:\n            continue\n",
           "        if not execute or any(WORKING_DIRECTORY.match(m.text) for m in step.misplaced_lines):\n"
           "            continue\n")),
      [DL + "test_a_misplaced_working_directory_stops_commands_in_other_steps_too"]),
     ("K a working directory after a command is not caught",
-     lambda: source(("        if WORKING_DIRECTORY.match(line) or ELEMENTS_HEADING.match(line):\n",
-                     "        if (WORKING_DIRECTORY.match(line) or ELEMENTS_HEADING.match(line))"
+     lambda: source(("            if WORKING_DIRECTORY.match(line) or ELEMENTS_HEADING.match(line):\n",
+                     "            if (WORKING_DIRECTORY.match(line) or ELEMENTS_HEADING.match(line))"
                      " and not current.commands:\n")),
      [DL + "test_a_working_directory_after_a_command_is_still_caught"]),
     ("J the shell is asked for despite a misplaced working directory",
@@ -191,23 +255,30 @@ def run(names):
         return unittest.TextTestRunner(stream=sink, verbosity=0).run(suite)
 
 
+def clean(result):
+    return not (result.failures or result.errors or result.skipped)
+
+
 print(f"console output page at start: {checker._windows_api()[0].GetConsoleOutputCP()}")
 every_test = sorted({name for _, _, names in MUTANTS for name in names})
-control = run(every_test)
-if control.failures or control.errors or control.skipped:
-    print(f"CONTROL FAILED: {len(control.failures)} failures, {len(control.errors)} errors, "
-          f"{len(control.skipped)} skipped of {control.testsRun} unmutated tests")
+as_imported = run(every_test)
+with source():
+    through_source = run(every_test)
+if not (clean(as_imported) and clean(through_source)):
+    for label, result in (("as imported", as_imported), ("through the source path", through_source)):
+        print(f"CONTROL {label}: {len(result.failures)} failures, {len(result.errors)} errors, "
+              f"{len(result.skipped)} skipped of {result.testsRun}")
     sys.exit(2)
-print(f"control: {control.testsRun} named tests pass unmutated")
+print(f"control: {len(every_test)} named tests pass unmutated, as imported and through the source path")
 
 survivors = []
 for name, mutate, tests in MUTANTS:
     with mutate():
         result = run(tests)
-    red = len(result.failures) + len(result.errors)
-    killed = red == len(tests) and not result.skipped
-    print(f"{'killed' if killed else 'SURVIVED'}: {name} ({red} of {len(tests)} red, "
-          f"{len(result.skipped)} skipped)")
+    failed, errored = len(result.failures), len(result.errors)
+    killed = failed == len(tests) and not errored and not result.skipped
+    print(f"{'killed' if killed else 'NOT KILLED'}: {name} ({failed} of {len(tests)} failed, "
+          f"{errored} errored, {len(result.skipped)} skipped)")
     if not killed:
         survivors.append(name)
 sys.exit(1 if survivors else 0)

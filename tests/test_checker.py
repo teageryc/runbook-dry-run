@@ -1146,6 +1146,18 @@ class FencesInsideContainers(unittest.TestCase):
         self.assertEqual(["echo real"], book.steps[0].commands)
         self.assertIsNone(book.steps[0].unclosed_fence)
 
+    def test_a_wide_list_marker_reads_the_item_from_its_content_column(self):
+        """A closer 4 spaces in closes a "10. " item's fence, at the end of the document too.
+
+        The document ends inside the item: with no later line to end the item, a closer
+        that was not recognised would leave the fence open.
+        """
+        book = parse(
+            self.HEAD + "## Step 1 - x\nOn failure: stop.\n\n10. ```\n    shown\n    ```\n"
+        )
+        self.assertIsNone(book.steps[0].unclosed_fence)
+        self.assertEqual("stop.", book.steps[0].failure_branch)
+
     def test_a_list_fence_ends_with_its_item(self):
         """A line indented less than the item ends the item, and its fence (CommonMark)."""
         book = parse(fenced_doc("- ```", "  shown", "Run: `echo after`", FENCE, "Run: `x`", FENCE))
