@@ -567,6 +567,12 @@ def _windows_api():
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
     kernel32.GetConsoleOutputCP.restype = wintypes.UINT
     kernel32.GetConsoleOutputCP.argtypes = []
+    kernel32.GetConsoleCP.restype = wintypes.UINT
+    kernel32.GetConsoleCP.argtypes = []
+    kernel32.SetConsoleOutputCP.restype = wintypes.BOOL
+    kernel32.SetConsoleOutputCP.argtypes = [wintypes.UINT]
+    kernel32.SetConsoleCP.restype = wintypes.BOOL
+    kernel32.SetConsoleCP.argtypes = [wintypes.UINT]
     ntdll.NtResumeProcess.argtypes = [wintypes.HANDLE]
     return kernel32, ntdll
 
@@ -588,6 +594,31 @@ def _console_encoding() -> str | None:
     except LookupError:
         return None
     return encoding
+
+
+@contextlib.contextmanager
+def _console_pages_kept() -> Iterator[None]:
+    """Leave the console's code pages as the check found them. Windows only.
+
+    A command that runs chcp changes both pages, input and output, of the console
+    it shares with the checker, and the change outlives the checker: measured 437
+    to 65001 from Git Bash and 65001 to 850 from PowerShell, still in place after
+    Python exited. Both are put back, because chcp.com reports the input page.
+    Inside the run the pages are left alone, as one terminal carries them from step
+    to step, so each command is still read in the page it starts with.
+    """
+    if sys.platform != "win32":
+        yield
+        return
+    kernel32 = _windows_api()[0]
+    output_page, input_page = kernel32.GetConsoleOutputCP(), kernel32.GetConsoleCP()
+    try:
+        yield
+    finally:
+        if output_page and kernel32.GetConsoleOutputCP() != output_page:
+            kernel32.SetConsoleOutputCP(output_page)
+        if input_page and kernel32.GetConsoleCP() != input_page:
+            kernel32.SetConsoleCP(input_page)
 
 
 def _new_job():
@@ -722,6 +753,19 @@ def check(
     timeout: float = 60.0,
 ) -> list[Finding]:
     """Return every finding, in step order. An empty list means every step is followable."""
+    if not execute:
+        return _check(book, base_dir, execute, timeout)
+    with _console_pages_kept():
+        return _check(book, base_dir, execute, timeout)
+
+
+def _check(
+    book: Runbook,
+    base_dir: str | None,
+    execute: bool,
+    timeout: float,
+) -> list[Finding]:
+    """check()'s body; check() keeps the console's code pages around it."""
     findings: list[Finding] = []
 
     if not book.steps:

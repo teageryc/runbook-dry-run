@@ -929,5 +929,62 @@ class DocumentLinesInsideAStep(unittest.TestCase):
         self.assertTrue(os.path.exists(self.MARKER), "the control command never ran")
 
 
+@unittest.skipUnless(sys.platform == "win32", "the console code page is a Windows fact")
+class ConsoleCodePage(unittest.TestCase):
+    """A runbook's chcp must not outlive the check (measured: it stayed in the terminal).
+
+    chcp sets both of the console's pages, input and output, and chcp.com reports
+    the input one: restoring only the output page left `chcp` showing 65001.
+    """
+
+    def setUp(self):
+        import ctypes
+
+        self.kernel32 = ctypes.WinDLL("kernel32")
+        for name in ("GetConsoleCP", "GetConsoleOutputCP"):
+            getattr(self.kernel32, name).restype = ctypes.c_uint
+        for name in ("SetConsoleCP", "SetConsoleOutputCP"):
+            getattr(self.kernel32, name).argtypes = [ctypes.c_uint]
+        self.start = self.kernel32.GetConsoleOutputCP()
+        self.start_input = self.kernel32.GetConsoleCP()
+        if not self.start:
+            self.skipTest("no console attached, so there is no code page to keep")
+        # Positive control: in this launch context a child's chcp must move the page,
+        # or the first test cannot fail and proves nothing.
+        subprocess.run("chcp 850>nul", shell=True)
+        moved = self.kernel32.GetConsoleOutputCP()
+        self.tearDown()
+        if moved == self.start:
+            self.skipTest("this console does not share its code page with a child")
+
+    def tearDown(self):
+        self.kernel32.SetConsoleOutputCP(self.start)
+        self.kernel32.SetConsoleCP(self.start_input)
+
+    def pages(self):
+        return self.kernel32.GetConsoleCP(), self.kernel32.GetConsoleOutputCP()
+
+    def test_a_chcp_in_a_command_does_not_outlive_the_check(self):
+        text = one_step("Shell: `cmd`", "Run: `chcp 850>nul`")
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertEqual([], findings, msg=f"unexpected findings: {findings}")
+        self.assertEqual((self.start_input, self.start), self.pages())
+
+    def test_within_the_run_the_new_page_carries_to_the_next_command(self):
+        """As in one terminal: step 2 is read in the page step 1 set, never reset per command.
+
+        Discriminates only from a console that starts in a page other than 65001
+        (Git Bash on the machine this was written on); from 65001 it cannot fail.
+        """
+        text = (
+            "# Runbook: x\n\nWorking directory: `.`\nShell: `cmd`\n\n"
+            "## Step 1 - set the page\nRun: `chcp 65001>nul`\nOn failure: stop.\n\n"
+            "## Step 2 - write in it\nRun: `echo 中文 1>&2 & exit 1`\nOn failure: stop.\n"
+        )
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertEqual({"COMMAND_FAILED"}, codes_at(findings, 2))
+        self.assertIn("exited 1: 中文", findings[0].detail)
+
+
 if __name__ == "__main__":
     unittest.main()
