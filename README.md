@@ -87,10 +87,10 @@ Shell: `Git Bash`
 | `EXPECTED_FAILURE_NOT_OBSERVED` | a `Run (expect-fail):` command exited `0`, or exited a code other than the declared one |
 | `MANUAL_GATE_UNRESOLVED` | an `After manual step:` names a step that does not exist or does not come first |
 | `SHELL_UNRESOLVED` | the `Shell:` line names a shell this tool does not know, sits inside a step, or conflicts with another; or, under `--execute`, names a shell this machine does not have. Nothing is then executed |
-| `FENCE_UNCLOSED` | a code fence never closes, so nothing after it would be checked. Nothing is then executed |
-| `FENCE_MISALIGNED` | a code fence is closed by a line indented less than its opener, so which lines are code is not known. Nothing is then executed |
+| `FENCE_UNCLOSED` | a code fence or HTML block never closes, so nothing after it would be checked. Nothing is then executed |
+| `FENCE_MISALIGNED` | a code fence or HTML block opened two or three spaces in is followed by a line indented less, so which lines are code is not known. Nothing is then executed |
 | `DOCUMENT_LINE_IN_STEP` | a `Working directory:` or `Elements:` line sits inside a step, where it is not read. For a misplaced `Working directory:`, nothing is then executed |
-| `COMMAND_SKIPPED_DESTRUCTIVE` · `COMMAND_DEFERRED_MANUAL_GATE` · `FENCED_LINE_SKIPPED` | informational: a step was reported, not executed, or a line inside fenced code was not read |
+| `COMMAND_SKIPPED_DESTRUCTIVE` · `COMMAND_DEFERRED_MANUAL_GATE` · `FENCED_LINE_SKIPPED` | informational: a step was reported, not executed, or a line inside fenced code or an HTML block was not read |
 
 ### Two things worth knowing before you trust it
 
@@ -193,10 +193,10 @@ Shell: `Git Bash`
 | `EXPECTED_FAILURE_NOT_OBSERVED` | 某条 `Run (expect-fail):` 命令退出码为 `0`，或不是声明的那一个 |
 | `MANUAL_GATE_UNRESOLVED` | 某个 `After manual step:` 点的步骤不存在，或不在本步骤之前 |
 | `SHELL_UNRESOLVED` | `Shell:` 行点名的 shell 本工具不认识、写在了步骤里，或与另一行冲突；或者在 `--execute` 下，点名的 shell 不在这台机器上。此时什么都不执行 |
-| `FENCE_UNCLOSED` | 某个代码围栏没有关闭，于是它之后的内容都不会被检查。此时什么都不执行 |
-| `FENCE_MISALIGNED` | 代码围栏由一行缩进比开头少的行关闭，于是无法确定哪些行是代码。此时什么都不执行 |
+| `FENCE_UNCLOSED` | 某个代码围栏或 HTML 块没有关闭，于是它之后的内容都不会被检查。此时什么都不执行 |
+| `FENCE_MISALIGNED` | 以两到三个空格缩进开启的代码围栏或 HTML 块，后面出现了缩进更少的一行，于是无法确定哪些行是代码。此时什么都不执行 |
 | `DOCUMENT_LINE_IN_STEP` | `Working directory:` 或 `Elements:` 行写在了步骤里，在那里不会被读取。若写错位置的是 `Working directory:`，此时什么都不执行 |
-| `COMMAND_SKIPPED_DESTRUCTIVE` · `COMMAND_DEFERRED_MANUAL_GATE` · `FENCED_LINE_SKIPPED` | 提示性：步骤被报告，未被执行；或围栏代码块里的一行未被读取 |
+| `COMMAND_SKIPPED_DESTRUCTIVE` · `COMMAND_DEFERRED_MANUAL_GATE` · `FENCED_LINE_SKIPPED` | 提示性：步骤被报告，未被执行；或围栏代码块或 HTML 块里的一行未被读取 |
 
 ### 信任它之前值得知道的两件事
 
