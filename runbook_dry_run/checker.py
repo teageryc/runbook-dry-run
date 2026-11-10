@@ -8,6 +8,7 @@ step it belongs to, because "this runbook has a broken path" is not actionable a
 from __future__ import annotations
 
 import codecs
+import contextlib
 import functools
 import locale
 import os
@@ -15,7 +16,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from typing import Iterable, Sequence
+from typing import Iterable, Iterator, NamedTuple, Sequence
 
 SEVERITY_ERROR = "error"
 SEVERITY_INFO = "info"
@@ -32,6 +33,12 @@ SHELL_LINE = re.compile(r"^Shell\s*:\s*(.*)$")
 ELEMENTS_HEADING = re.compile(r"^Elements\s*:\s*$")
 BULLET = re.compile(r"^[-*]\s+(.*?)\s*$")
 BACKTICKED = re.compile(r"`([^`]+)`")
+# CommonMark fenced code: up to three spaces, then three or more backticks or
+# tildes. The closing fence uses the same character, is at least as long, and has
+# nothing after it. A backtick fence's info string may not hold a backtick, so
+# ```x``` on one line is inline code, not a fence that runs to the end.
+FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+FENCE_CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})$")
 
 # `Shell:` names as a reader writes them (matched case-insensitively), mapped to
 # the shell each one means. The single source for the names the tool accepts.
@@ -98,6 +105,13 @@ class Finding:
         return f"[{self.severity}] {where}{title}: {self.code} - {self.detail}"
 
 
+class SourceLine(NamedTuple):
+    """A line of the document: its 1-based number and its text, right-stripped."""
+
+    number: int
+    text: str
+
+
 @dataclass
 class Step:
     number: int
@@ -110,6 +124,10 @@ class Step:
     failure_branch: str | None = None
     manual_gate: int | None = None
     manual_gate_declared: bool = False
+    # Fields added after 0.3 go below this line: Step is public API, and a field
+    # inserted above shifts every positional argument written against 0.3.
+    fenced_lines: list[SourceLine] = field(default_factory=list)
+    unclosed_fence: SourceLine | None = None
 
 
 @dataclass(frozen=True)
@@ -142,6 +160,8 @@ class Runbook:
     # inserted above shifts every positional argument written against 0.2.
     shell_declarations: list[str] = field(default_factory=list)
     shell_in_steps: list[int] = field(default_factory=list)
+    fenced_lines: list[SourceLine] = field(default_factory=list)
+    unclosed_fence: SourceLine | None = None
 
     @property
     def shell(self) -> str | None:
@@ -168,18 +188,62 @@ def _all_backticked(value: str) -> list[str]:
     return found if found else ([value.strip()] if value.strip() else [])
 
 
+_READ_LINES = (STEP_HEADING, DIRECTIVE, WORKING_DIRECTORY, SHELL_LINE, ELEMENTS_HEADING)
+
+
+def _opens_fence(line: str) -> str | None:
+    """The fence this line opens, or None."""
+    match = FENCE_OPEN.match(line)
+    if not match:
+        return None
+    fence, info = match.group(1), match.group(2)
+    if fence[0] == "`" and "`" in info:
+        return None
+    return fence
+
+
+def _closes_fence(line: str, fence: str) -> bool:
+    match = FENCE_CLOSE.match(line)
+    return bool(match) and match.group(1)[0] == fence[0] and len(match.group(1)) >= len(fence)
+
+
+def _would_be_read(line: str) -> bool:
+    """Whether the parser acts on this line when it is not inside a fence."""
+    return any(shape.match(line) for shape in _READ_LINES)
+
+
 def parse(text: str) -> Runbook:
     """Read a runbook into steps. Never raises on malformed input.
 
     A parser that throws turns a document defect into a tool defect, and the
     reader is then told nothing about the eleven steps that were fine.
+
+    A line inside fenced code is an example, never an instruction (v0.4): before
+    it, a fenced `Run:` example was a command that --execute ran. Each fenced line
+    that would otherwise be read is recorded, so check() can say what it skipped.
     """
     book = Runbook()
     current: Step | None = None
     in_elements = False
+    fence: str | None = None
+    fence_opened: SourceLine | None = None
 
-    for raw in text.splitlines():
+    for number, raw in enumerate(text.splitlines(), start=1):
         line = raw.rstrip()
+
+        if fence is not None:
+            if _closes_fence(line, fence):
+                fence = None
+            elif _would_be_read(line):
+                owner = current.fenced_lines if current is not None else book.fenced_lines
+                owner.append(SourceLine(number, line))
+            continue
+
+        opened = _opens_fence(line)
+        if opened is not None:
+            fence, fence_opened = opened, SourceLine(number, line)
+            in_elements = False
+            continue
 
         heading = STEP_HEADING.match(line)
         if heading:
@@ -248,6 +312,14 @@ def parse(text: str) -> Runbook:
                         int(declared) if declared is not None else None,
                     )
                 )
+
+    if fence is not None:
+        # An unclosed fence runs to the end, as a renderer shows it. Headings inside
+        # it are skipped, so `current` is still the step where it opened.
+        if current is None:
+            book.unclosed_fence = fence_opened
+        else:
+            current.unclosed_fence = fence_opened
 
     return book
 

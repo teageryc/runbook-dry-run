@@ -725,5 +725,84 @@ class UnresolvedShell(unittest.TestCase):
         self.assertFalse(has_errors(findings))
 
 
+FENCE = "```"
+
+
+def fenced_doc(*step_lines: str, before: str = "") -> str:
+    """A one-step runbook; its step body is the given lines, verbatim, from line 6."""
+    body = "\n".join(step_lines)
+    return (
+        "# Runbook: fences\n\nWorking directory: `.`\n"
+        f"{before}\n"
+        "## Step 1 - the step under test\n"
+        f"{body}\n"
+        "On failure: stop.\n"
+    )
+
+
+class FencedCode(unittest.TestCase):
+    """A line inside fenced code is an example, never an instruction (decision C1, KL-0277).
+
+    Fenced lines are compared as plain (number, text) tuples: SourceLine is a NamedTuple.
+    """
+
+    def test_a_fenced_run_is_not_a_command(self):
+        book = parse(fenced_doc(FENCE, "Run: `echo example`", FENCE, "Run: `echo real`"))
+        self.assertEqual(["echo real"], book.steps[0].commands)
+        self.assertEqual([(7, "Run: `echo example`")], book.steps[0].fenced_lines)
+
+    def test_a_tilde_fence_and_an_indented_fence_are_fences_too(self):
+        book = parse(fenced_doc("~~~", "Run: `a`", "~~~", "   ```", "Run: `b`", "   ```"))
+        self.assertEqual([], book.steps[0].commands)
+        self.assertEqual([7, 10], [line.number for line in book.steps[0].fenced_lines])
+
+    def test_a_shorter_or_different_fence_does_not_close_it(self):
+        book = parse(
+            fenced_doc("````", FENCE, "Run: `a`", "~~~~", "Run: `b`", "````", "Run: `c`")
+        )
+        self.assertEqual(["c"], book.steps[0].commands)
+        self.assertEqual([8, 10], [line.number for line in book.steps[0].fenced_lines])
+
+    def test_a_fenced_step_heading_is_not_a_step(self):
+        book = parse(fenced_doc(FENCE, "## Step 2 - an example", "On failure: x.", FENCE))
+        self.assertEqual([1], [step.number for step in book.steps])
+        self.assertEqual("stop.", book.steps[0].failure_branch)
+
+    def test_a_one_line_code_span_is_not_a_fence(self):
+        """```x``` on one line is inline code; read as a fence it would swallow the document."""
+        book = parse(fenced_doc("```echo inline```", "Run: `echo real`"))
+        self.assertEqual(["echo real"], book.steps[0].commands)
+        self.assertEqual([], book.steps[0].fenced_lines)
+        self.assertIsNone(book.steps[0].unclosed_fence)
+
+    def test_an_unclosed_fence_is_recorded_where_it_opened(self):
+        text = fenced_doc(FENCE, "Run: `a`") + "\n## Step 2 - swallowed\nOn failure: x.\n"
+        book = parse(text)
+        self.assertEqual([1], [step.number for step in book.steps])
+        self.assertEqual((6, FENCE), book.steps[0].unclosed_fence)
+        self.assertEqual([7, 8, 10, 11], [line.number for line in book.steps[0].fenced_lines])
+        self.assertIsNone(book.unclosed_fence)
+
+    def test_an_unclosed_fence_before_the_first_step_is_the_documents(self):
+        book = parse(
+            "# Runbook: x\n\nWorking directory: `.`\n```\n## Step 1 - swallowed\nOn failure: x.\n"
+        )
+        self.assertEqual([], book.steps)
+        self.assertEqual((4, FENCE), book.unclosed_fence)
+        self.assertEqual([5, 6], [line.number for line in book.fenced_lines])
+
+    def test_a_fenced_document_line_before_the_first_step_is_not_read(self):
+        before = "```\nWorking directory: `elsewhere`\nShell: `pwsh`\n```"
+        book = parse(fenced_doc("Run: `x`", before=before))
+        self.assertEqual(".", book.working_directory)
+        self.assertIsNone(book.shell)
+
+    def test_the_new_fields_are_appended_so_positional_callers_still_line_up(self):
+        step = Step(1, "t", ["echo a"])
+        self.assertEqual(["echo a"], step.commands)
+        self.assertEqual(([], None), (step.fenced_lines, step.unclosed_fence))
+        self.assertEqual(([], None), (Runbook().fenced_lines, Runbook().unclosed_fence))
+
+
 if __name__ == "__main__":
     unittest.main()
