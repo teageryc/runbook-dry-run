@@ -75,7 +75,10 @@ FINDING_CODES = {
     "FENCED_LINE_SKIPPED": (
         "a line the parser would read sits inside fenced code, so it was not read"
     ),
-    "FENCE_UNCLOSED": "a code fence never closes, so nothing after it was checked",
+    "FENCE_UNCLOSED": (
+        "a code fence never closes, so nothing after it was checked and no command in "
+        "the document is executed"
+    ),
     "DOCUMENT_LINE_IN_STEP": (
         "a Working directory: or Elements: line sits inside a step, where it is not read; "
         "a misplaced Working directory: also stops every command in the document"
@@ -709,7 +712,8 @@ def _fence_findings(
                 title,
                 "FENCE_UNCLOSED",
                 f"the code fence opened at line {unclosed.number} never closes, so every "
-                "line after it is code and nothing after it was checked",
+                "line after it is code and none of it was checked, and no command in "
+                "this document was executed",
             )
         )
     for skipped in fenced:
@@ -724,6 +728,18 @@ def _fence_findings(
             )
         )
     return found
+
+
+def _has_unclosed_fence(book: Runbook) -> bool:
+    """Whether a fence never closes, which stops every command (review finding 1).
+
+    The checker does not model list items, block quotes or HTML blocks, so a fence a
+    renderer closes where its container ends stays open here and the rest of the
+    document reads inverted: which lines are examples is then no longer known.
+    """
+    return book.unclosed_fence is not None or any(
+        step.unclosed_fence is not None for step in book.steps
+    )
 
 
 def _misplaces_directory(book: Runbook) -> bool:
@@ -791,8 +807,11 @@ def _check(
     launcher = Launcher()
     misplaced_shell = set(book.shell_in_steps)
     # A misplaced Working directory: stops every command, as a misplaced Shell: does
-    # (spec §9 and §11): ignoring either changes how the commands run.
-    refuse_commands = bool(misplaced_shell) or _misplaces_directory(book)
+    # (spec §9 and §11): ignoring either changes how the commands run. So does a
+    # fence that never closes: which lines are examples is then no longer known.
+    refuse_commands = (
+        bool(misplaced_shell) or _misplaces_directory(book) or _has_unclosed_fence(book)
+    )
     shell_problem: str | None = None
     declared_shells = {_shell_of(d) or d.strip().casefold() for d in book.shell_declarations}
     if len(declared_shells) > 1:

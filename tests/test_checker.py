@@ -863,6 +863,50 @@ class FencedCodeFindings(unittest.TestCase):
         self.assertFalse(has_errors(findings))
 
 
+class UnclosedFenceStopsCommands(unittest.TestCase):
+    """Review finding 1, Yan's pick: once a fence does not close, nothing runs.
+
+    The checker does not model list items: a fence a renderer closes where its item
+    ends stays open here, the rest of the document reads inverted, and before this
+    rule a fenced example ran while the real command did not.
+    """
+
+    MARKERS = [os.path.join(REPO_ROOT, name) for name in ("real-marker.tmp", "example-marker.tmp")]
+    REAL = "Run: `python -c \"open('real-marker.tmp', 'w').close()\"`"
+    EXAMPLE = "Run: `python -c \"open('example-marker.tmp', 'w').close()\"`"
+
+    def setUp(self):
+        for marker in self.MARKERS:
+            if os.path.exists(marker):
+                os.remove(marker)
+
+    tearDown = setUp
+
+    def test_an_unclosed_fence_stops_every_command(self):
+        text = (
+            "# Runbook: x\n\nWorking directory: `.`\n\n"
+            f"## Step 1 - runs first\n{self.REAL}\nOn failure: stop.\n\n"
+            "## Step 2 - opens a fence\nOn failure: stop.\n```\n"
+        )
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertFalse(os.path.exists(self.MARKERS[0]), "a command ran despite an unclosed fence")
+        self.assertEqual({"FENCE_UNCLOSED"}, codes_at(findings, 2))
+        self.assertIn("no command in this document was executed", findings[0].detail)
+
+    def test_a_fence_left_open_in_a_list_item_runs_neither_command(self):
+        text = (
+            "# Runbook: x\n\nWorking directory: `.`\n\n"
+            "## Step 1 - inspect\n1. The output looks like this:\n   ```\n   all good\n"
+            "2. That is all there is to see.\n\nOn failure: stop.\n\n"
+            f"## Step 2 - the real command\n{self.REAL}\nOn failure: stop.\n\n"
+            f"An example, never run:\n\n```\n{self.EXAMPLE}\n```\n"
+        )
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertFalse(os.path.exists(self.MARKERS[1]), "a fenced example was executed")
+        self.assertFalse(os.path.exists(self.MARKERS[0]), "a command ran despite an unclosed fence")
+        self.assertIn("FENCE_UNCLOSED", codes_at(findings, 1))
+
+
 class DocumentLinesInsideAStep(unittest.TestCase):
     """Working directory: and Elements: belong before the first step (decision C2, KL-0277)."""
 

@@ -129,14 +129,18 @@ jobs:
           fi
           rm -f unfenced-marker.tmp
 
-      - name: An unclosed fence exits 1
+      - name: An unclosed fence exits 1 and runs nothing
         run: |
           set +e
-          python -m runbook_dry_run tests/fixtures/bad-unclosed-fence.md --base-dir .
+          python -m runbook_dry_run tests/fixtures/bad-unclosed-fence.md --base-dir . --execute
           code=$?
           set -e
           if [ "$code" -ne 1 ]; then
             echo "expected exit 1 from an unclosed fence, got $code"
+            exit 1
+          fi
+          if [ -f unclosed-fence-marker.tmp ]; then
+            echo "a command ran despite an unclosed fence"
             exit 1
           fi
 

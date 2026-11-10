@@ -3,6 +3,7 @@
 Working directory: `.`
 
 ## Step 1 — Show an example and forget to close it
+Run: `python -c "open('unclosed-fence-marker.tmp', 'w').close()"`
 On failure: stop.
 
 ```
