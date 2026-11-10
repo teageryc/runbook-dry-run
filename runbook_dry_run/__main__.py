@@ -50,15 +50,25 @@ def _printable_output():
     file names on POSIX) is kept, and the streams are put back when main() returns.
     """
     changed = []
-    for stream in (sys.stdout, sys.stderr):
-        if getattr(stream, "errors", None) == "strict" and hasattr(stream, "reconfigure"):
-            stream.reconfigure(errors="backslashreplace")
-            changed.append(stream)
     try:
+        for stream in (sys.stdout, sys.stderr):
+            if getattr(stream, "errors", None) == "strict" and hasattr(stream, "reconfigure"):
+                stream.reconfigure(errors="backslashreplace")
+                changed.append(stream)
         yield
     finally:
         for stream in changed:
             stream.reconfigure(errors="strict")
+
+
+def _write(text: str, stream=None) -> None:
+    """print(), escaping by hand for a stream that cannot be reconfigured."""
+    stream = stream or sys.stdout
+    try:
+        print(text, file=stream)
+    except UnicodeEncodeError:
+        encoding = getattr(stream, "encoding", None) or "ascii"
+        print(text.encode(encoding, "backslashreplace").decode(encoding), file=stream)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -74,13 +84,13 @@ def _main(argv: list[str] | None) -> int:
             text = handle.read()
     except UnicodeDecodeError as exc:
         # A traceback and exit 1 would read like "has errors" to a caller.
-        print(
+        _write(
             f"cannot read {args.runbook}: it is not UTF-8 (byte {exc.start}: {exc.reason})",
-            file=sys.stderr,
+            sys.stderr,
         )
         return 2
     except OSError as exc:
-        print(f"cannot read {args.runbook}: {exc}", file=sys.stderr)
+        _write(f"cannot read {args.runbook}: {exc}", sys.stderr)
         return 2
 
     findings = check(
@@ -91,9 +101,9 @@ def _main(argv: list[str] | None) -> int:
     )
 
     if args.json:
-        print(json.dumps([asdict(f) for f in findings], indent=2))
+        _write(json.dumps([asdict(f) for f in findings], indent=2))
     else:
-        print(format_report(findings, args.runbook))
+        _write(format_report(findings, args.runbook))
 
     return 1 if has_errors(findings) else 0
 

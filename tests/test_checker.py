@@ -1013,6 +1013,32 @@ class CommandLineOutput(unittest.TestCase):
             self.assertIn(b"step 1", stream.buffer.getvalue())
             self.assertIn(b"\\u4e2d\\u6587", stream.buffer.getvalue())
 
+    def test_a_stream_that_cannot_be_reconfigured_still_gets_the_report(self):
+        """Third review, m3: a stand-in stdout with no reconfigure() crashed with exit 1."""
+
+        class AsciiOnly:
+            encoding, errors = "ascii", "strict"
+
+            def __init__(self):
+                self.parts = []
+
+            def write(self, text):
+                text.encode("ascii")
+                self.parts.append(text)
+                return len(text)
+
+            def flush(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.cjk_runbook(folder)
+            stream = AsciiOnly()
+            with mock.patch("sys.stdout", stream):
+                code = cli_main([path, "--base-dir", REPO_ROOT])
+        self.assertEqual(0, code)
+        self.assertIn("step 1", "".join(stream.parts))
+        self.assertIn("\\u4e2d\\u6587", "".join(stream.parts))
+
     def test_a_runbook_that_is_not_utf_8_is_refused_with_exit_2(self):
         """Second review, finding 5: a traceback and exit 1 read like "has errors"."""
         with tempfile.TemporaryDirectory() as folder:
