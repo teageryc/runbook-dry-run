@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 from dataclasses import asdict
@@ -38,26 +39,46 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _never_fail_to_print() -> None:
-    """Escape what the output's encoding cannot hold, instead of crashing.
+@contextlib.contextmanager
+def _printable_output():
+    """Escape what the output's encoding cannot hold, instead of crashing, for one call.
 
     Redirected, Python writes in the locale's encoding (cp1252 on Windows), and a
     report quoting Chinese text crashed with exit 1, which a caller cannot tell from
-    "has errors". The encoding is kept, so output that printed before is unchanged.
+    "has errors". Only a stream on the default strict handler is changed, so a
+    handler the caller chose (PYTHONIOENCODING=ascii:replace, or surrogateescape for
+    file names on POSIX) is kept, and the streams are put back when main() returns.
     """
+    changed = []
     for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            reconfigure(errors="backslashreplace")
+        if getattr(stream, "errors", None) == "strict" and hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="backslashreplace")
+            changed.append(stream)
+    try:
+        yield
+    finally:
+        for stream in changed:
+            stream.reconfigure(errors="strict")
 
 
 def main(argv: list[str] | None = None) -> int:
-    _never_fail_to_print()
+    with _printable_output():
+        return _main(argv)
+
+
+def _main(argv: list[str] | None) -> int:
     args = build_parser().parse_args(argv)
 
     try:
         with open(args.runbook, encoding="utf-8") as handle:
             text = handle.read()
+    except UnicodeDecodeError as exc:
+        # A traceback and exit 1 would read like "has errors" to a caller.
+        print(
+            f"cannot read {args.runbook}: it is not UTF-8 (byte {exc.start}: {exc.reason})",
+            file=sys.stderr,
+        )
+        return 2
     except OSError as exc:
         print(f"cannot read {args.runbook}: {exc}", file=sys.stderr)
         return 2

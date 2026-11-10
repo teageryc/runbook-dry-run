@@ -6,6 +6,7 @@ every step as broken. The step number is what makes the assertion worth anything
 
 from __future__ import annotations
 
+import io
 import os
 import shutil
 import subprocess
@@ -30,6 +31,7 @@ from runbook_dry_run.checker import (  # noqa: E402
     parse,
     resolve_shell,
 )
+from runbook_dry_run.__main__ import main as cli_main  # noqa: E402
 
 
 def run_fixture(name: str, execute: bool = False):
@@ -811,6 +813,12 @@ class FencedCode(unittest.TestCase):
         self.assertEqual(["c"], book.steps[0].commands)
         self.assertEqual([7, 9], [line.number for line in book.steps[0].fenced_lines])
 
+    def test_a_closing_fence_followed_by_spaces_or_a_tab_still_closes(self):
+        """The other half of review finding 7 (second review): trailing whitespace is common."""
+        for closer in ("```  ", "```\t"):
+            book = parse(fenced_doc(FENCE, "Run: `a`", closer, "Run: `b`"))
+            self.assertEqual(["b"], book.steps[0].commands, msg=repr(closer))
+
     def test_only_commonmark_line_endings_split_lines(self):
         """U+2028 is not a line ending, so the line numbers after it stay true."""
         book = parse(fenced_doc("text more", FENCE, "Run: `x`", FENCE))
@@ -969,6 +977,53 @@ class CommandLineOutput(unittest.TestCase):
         self.assertIn(b"step 1", result.stdout)
         self.assertIn(b"FENCED_LINE_SKIPPED", result.stdout)
         self.assertIn(b"\\u4e2d\\u6587", result.stdout)
+
+    def cjk_runbook(self, folder):
+        path = os.path.join(folder, "cjk.md")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(fenced_doc(FENCE, "Run: `echo 中文`", FENCE))
+        return path
+
+    def test_an_error_handler_the_caller_chose_is_kept(self):
+        """Second review, finding 4: only the default strict handler is replaced."""
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.cjk_runbook(folder)
+            env = {k: v for k, v in os.environ.items() if k not in ("PYTHONUTF8", "PYTHONIOENCODING")}
+            env["PYTHONIOENCODING"] = "ascii:replace"
+            result = subprocess.run(
+                [sys.executable, "-m", "runbook_dry_run", path, "--base-dir", REPO_ROOT],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+            )
+        self.assertEqual(0, result.returncode, msg=result.stderr.decode("ascii", "replace"))
+        self.assertIn(b"step 1", result.stdout)
+        self.assertIn(b"echo ??", result.stdout)
+
+    def test_main_puts_the_streams_back(self):
+        """Called in-process, main() must not leave sys.stdout's handler changed."""
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.cjk_runbook(folder)
+            stream = io.TextIOWrapper(io.BytesIO(), encoding="ascii", errors="strict")
+            with mock.patch("sys.stdout", stream):
+                code = cli_main([path, "--base-dir", REPO_ROOT])
+            self.assertEqual(0, code)
+            self.assertEqual("strict", stream.errors)
+            stream.flush()
+            self.assertIn(b"step 1", stream.buffer.getvalue())
+            self.assertIn(b"\\u4e2d\\u6587", stream.buffer.getvalue())
+
+    def test_a_runbook_that_is_not_utf_8_is_refused_with_exit_2(self):
+        """Second review, finding 5: a traceback and exit 1 read like "has errors"."""
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "gbk.md")
+            with open(path, "wb") as handle:
+                handle.write("# Runbook: 中文\n".encode("gbk"))
+            errors = io.StringIO()
+            with mock.patch("sys.stderr", errors):
+                code = cli_main([path])
+        self.assertEqual(2, code)
+        self.assertIn("not UTF-8", errors.getvalue())
 
 
 class UnclosedFenceStopsCommands(unittest.TestCase):
