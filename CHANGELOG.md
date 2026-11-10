@@ -197,7 +197,8 @@ the first use found anything.
 - `docs/specs/2026-09-12-runbook-dry-run-design.md` — the dated design spec, with Non-goals.
 - `LIMITS.md` — what the tool cannot tell you, in the first person.
 
-[Unreleased]: https://github.com/teageryc/runbook-dry-run/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/teageryc/runbook-dry-run/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/teageryc/runbook-dry-run/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/teageryc/runbook-dry-run/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/teageryc/runbook-dry-run/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/teageryc/runbook-dry-run/releases/tag/v0.1.0
