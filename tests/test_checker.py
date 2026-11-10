@@ -863,6 +863,33 @@ class FencedCodeFindings(unittest.TestCase):
         self.assertFalse(has_errors(findings))
 
 
+class CommandLineOutput(unittest.TestCase):
+    """Review finding 2: a report must reach a pipe or a file whatever text it quotes.
+
+    Redirected, Python writes in the locale's encoding (cp1252 on Windows), and a
+    skipped line quoting Chinese crashed the report with exit 1, which CI cannot
+    tell from "has errors". PYTHONIOENCODING=ascii reproduces that on any platform.
+    """
+
+    def test_a_report_quoting_non_ascii_text_reaches_a_pipe(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "cjk.md")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(fenced_doc(FENCE, "Run: `echo 中文`", FENCE))
+            env = {k: v for k, v in os.environ.items() if k not in ("PYTHONUTF8", "PYTHONIOENCODING")}
+            env["PYTHONIOENCODING"] = "ascii"
+            result = subprocess.run(
+                [sys.executable, "-m", "runbook_dry_run", path, "--base-dir", REPO_ROOT],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+            )
+        self.assertEqual(0, result.returncode, msg=result.stderr.decode("ascii", "replace"))
+        self.assertIn(b"step 1", result.stdout)
+        self.assertIn(b"FENCED_LINE_SKIPPED", result.stdout)
+        self.assertIn(b"\\u4e2d\\u6587", result.stdout)
+
+
 class UnclosedFenceStopsCommands(unittest.TestCase):
     """Review finding 1, Yan's pick: once a fence does not close, nothing runs.
 

@@ -38,7 +38,21 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _never_fail_to_print() -> None:
+    """Escape what the output's encoding cannot hold, instead of crashing.
+
+    Redirected, Python writes in the locale's encoding (cp1252 on Windows), and a
+    report quoting Chinese text crashed with exit 1, which a caller cannot tell from
+    "has errors". The encoding is kept, so output that printed before is unchanged.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(errors="backslashreplace")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _never_fail_to_print()
     args = build_parser().parse_args(argv)
 
     try:
