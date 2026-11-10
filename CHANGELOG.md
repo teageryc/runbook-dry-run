@@ -6,6 +6,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-10
+
+The three limits 0.3.0 recorded and kept (spec section 10), changed on Yan's picks
+C1 to C3 and D1 to D5. Three code reviews ran before release, and the release gate
+is a differential fuzzer against a CommonMark parser (spec section 11).
+
+### Added
+
+- `FENCED_LINE_SKIPPED` (info): a line inside fenced code, or inside an HTML block
+  of CommonMark types 1 to 5, that the parser would otherwise read; reported at its
+  step and not read.
+- `FENCE_UNCLOSED` (error): a code fence or HTML block that never closes, at the
+  step where it opened, or at the document.
+- `FENCE_MISALIGNED` (error): a code fence or HTML block opened two or three spaces
+  in and followed by a line indented less, which in a list item would end it.
+- `DOCUMENT_LINE_IN_STEP` (error): `Working directory:` or `Elements:` inside a
+  step.
+- `FENCE_UNCLOSED`, `FENCE_MISALIGNED` and a misplaced `Working directory:` stop
+  every command in the document, as a misplaced `Shell:` already did.
+- `SourceLine`, and the `fenced_lines`, `unclosed_fence`, `misplaced_lines` and
+  `misaligned_fences` fields, appended to `Step` and `Runbook` so positional callers
+  still line up.
+- Seventy-two test cases, 129 in total (`grep -c -E '^    def test_'
+  tests/test_checker.py`), 41 mutation controls and a differential fuzz gate under
+  `docs/plans/evidence/2026-11-10-v0.4/`; the last two are development only.
+
+### Changed
+
+- **Documents that passed before may now fail, and commands that ran before may
+  not run.** A fenced `Run:` example is no longer executed; a fenced `## Step N` is
+  no longer a step; a fenced `Shell:` example inside a step no longer refuses the
+  document; a `Run:` inside `<pre>` or an HTML comment is no longer read; an
+  unclosed fence, a misaligned indented fence and a document line inside a step
+  are errors.
+- A fence opened on a list item's marker line (`` - ``` ``) and the item's lines
+  are read as CommonMark reads them; tabs are 4-column stops, and a blank line holds
+  only spaces and tabs.
+- A top-level fence or HTML block indented two or three spaces, with a line
+  indented less inside it, is refused although it is valid Markdown: the cost of
+  `FENCE_MISALIGNED`, fixed by indenting every line as far as the first.
+- Line numbers count CommonMark's line endings only; each line is still read in
+  the parts `str.splitlines()` makes of it, as before.
+- On Windows, the console's input and output code pages are put back when a
+  `--execute` check ends: a command's `chcp` used to stay in the terminal after the
+  checker exited. Output decoding is unchanged: the planned change was measured to
+  break one-line commands (spec section 11).
+- The spec gains section 11 and four rows in section 4; section 10 and three
+  `LIMITS.md` paragraphs carry dated corrections, and `LIMITS.md` gains a paragraph
+  on escaped redirected output; the README lists the new codes.
+- CI smokes: a fenced example leaves no marker beside an unfenced one that must;
+  an unclosed fence and a misplaced `Working directory:` exit 1 and run nothing.
+
+### Fixed
+
+- A report quoting text the output's encoding cannot hold no longer crashes when
+  redirected, where it exited 1 like a report with errors. Only a stream on the
+  default strict handler is switched, for the call only; a stream without
+  `reconfigure()` is escaped by hand.
+- A runbook that is not UTF-8 is a message and exit 2, as an unreadable file
+  already was, not a traceback and exit 1.
+
 ## [0.3.0] - 2026-11-03
 
 Built after the second real use, never during it. Re-checking the publishing

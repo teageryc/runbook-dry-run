@@ -1,8 +1,32 @@
+wsl: Failed to start the systemd user session for 'cheny'. See journalctl for more details.
 python: /tmp/rdr-bin/python -> Python 3.12.3; uname: Linux 6.6.87.2-microsoft-standard-WSL2
+test_a_report_quoting_non_ascii_text_reaches_a_pipe (test_checker.CommandLineOutput.test_a_report_quoting_non_ascii_text_reaches_a_pipe) ... ok
+test_a_runbook_that_is_not_utf_8_is_refused_with_exit_2 (test_checker.CommandLineOutput.test_a_runbook_that_is_not_utf_8_is_refused_with_exit_2)
+Second review, finding 5: a traceback and exit 1 read like "has errors". ... ok
+test_a_stream_that_cannot_be_reconfigured_still_gets_the_report (test_checker.CommandLineOutput.test_a_stream_that_cannot_be_reconfigured_still_gets_the_report)
+Third review, m3: a stand-in stdout with no reconfigure() crashed with exit 1. ... ok
+test_an_error_handler_the_caller_chose_is_kept (test_checker.CommandLineOutput.test_an_error_handler_the_caller_chose_is_kept)
+Second review, finding 4: only the default strict handler is replaced. ... ok
+test_main_puts_the_streams_back (test_checker.CommandLineOutput.test_main_puts_the_streams_back)
+Called in-process, main() must not leave sys.stdout's handler changed. ... ok
 test_a_nul_byte_in_a_command_is_a_finding (test_checker.CommandsThatCannotStart.test_a_nul_byte_in_a_command_is_a_finding) ... ok
 test_a_chcp_in_a_command_does_not_outlive_the_check (test_checker.ConsoleCodePage.test_a_chcp_in_a_command_does_not_outlive_the_check) ... skipped 'the console code page is a Windows fact'
 test_within_the_run_the_new_page_carries_to_the_next_command (test_checker.ConsoleCodePage.test_within_the_run_the_new_page_carries_to_the_next_command)
 As in one terminal: step 2 is read in the page step 1 set, never reset per command. ... skipped 'the console code page is a Windows fact'
+test_a_blank_line_inside_a_list_fence_does_not_end_it (test_checker.ContainerEdgesThirdReview.test_a_blank_line_inside_a_list_fence_does_not_end_it) ... ok
+test_a_command_inside_an_html_comment_is_not_read (test_checker.ContainerEdgesThirdReview.test_a_command_inside_an_html_comment_is_not_read) ... ok
+test_a_fence_after_a_pre_block_is_a_fence (test_checker.ContainerEdgesThirdReview.test_a_fence_after_a_pre_block_is_a_fence) ... ok
+test_a_tab_indented_line_stays_inside_its_list_fence (test_checker.ContainerEdgesThirdReview.test_a_tab_indented_line_stays_inside_its_list_fence)
+Tabs are 4-column stops (CommonMark): a Makefile recipe line inside "- ```make". ... ok
+test_an_html_block_that_never_closes_stops_every_command (test_checker.ContainerEdgesThirdReview.test_an_html_block_that_never_closes_stops_every_command) ... ok
+test_five_spaces_after_a_list_marker_is_indented_code_not_a_fence (test_checker.ContainerEdgesThirdReview.test_five_spaces_after_a_list_marker_is_indented_code_not_a_fence)
+The document ends inside the item, so no later line can end a fence by accident. ... ok
+test_html_blocks_of_types_3_to_5_hide_fence_lines (test_checker.ContainerEdgesThirdReview.test_html_blocks_of_types_3_to_5_hide_fence_lines) ... ok
+test_r1_list_fence_content_at_column_0_runs_nothing (test_checker.ContainerEdgesThirdReview.test_r1_list_fence_content_at_column_0_runs_nothing) ... ok
+test_r2b_a_pre_block_ended_by_its_list_item_runs_nothing (test_checker.ContainerEdgesThirdReview.test_r2b_a_pre_block_ended_by_its_list_item_runs_nothing) ... ok
+test_r3_a_non_breaking_space_line_ends_a_list_item (test_checker.ContainerEdgesThirdReview.test_r3_a_non_breaking_space_line_ends_a_list_item) ... ok
+test_r5_an_indented_fence_between_list_items_runs_nothing (test_checker.ContainerEdgesThirdReview.test_r5_an_indented_fence_between_list_items_runs_nothing) ... ok
+test_r6_a_command_inside_a_pre_block_is_not_read (test_checker.ContainerEdgesThirdReview.test_r6_a_command_inside_a_pre_block_is_not_read) ... ok
 test_failing_command_is_reported_at_step_two_only (test_checker.DefectIsReportedAtTheRightStep.test_failing_command_is_reported_at_step_two_only) ... ok
 test_missing_failure_branch_is_reported_at_step_two_only (test_checker.DefectIsReportedAtTheRightStep.test_missing_failure_branch_is_reported_at_step_two_only) ... ok
 test_unknown_control_is_reported_at_step_two_only (test_checker.DefectIsReportedAtTheRightStep.test_unknown_control_is_reported_at_step_two_only) ... ok
@@ -11,6 +35,10 @@ test_execute_mode_does_not_run_the_destructive_command (test_checker.Destructive
 test_a_document_with_no_steps_says_so (test_checker.DocumentLevelDefects.test_a_document_with_no_steps_says_so) ... ok
 test_a_document_with_no_working_directory_says_so_at_document_level (test_checker.DocumentLevelDefects.test_a_document_with_no_working_directory_says_so_at_document_level) ... ok
 test_a_malformed_document_does_not_raise (test_checker.DocumentLevelDefects.test_a_malformed_document_does_not_raise) ... ok
+test_a_misplaced_working_directory_never_asks_for_the_shell (test_checker.DocumentLinesInsideAStep.test_a_misplaced_working_directory_never_asks_for_the_shell) ... ok
+test_a_misplaced_working_directory_stops_commands_in_other_steps_too (test_checker.DocumentLinesInsideAStep.test_a_misplaced_working_directory_stops_commands_in_other_steps_too)
+D1 says every command in the document, not only the step's own. ... ok
+test_a_working_directory_after_a_command_is_still_caught (test_checker.DocumentLinesInsideAStep.test_a_working_directory_after_a_command_is_still_caught) ... ok
 test_a_working_directory_inside_a_step_is_an_error_at_that_step (test_checker.DocumentLinesInsideAStep.test_a_working_directory_inside_a_step_is_an_error_at_that_step) ... ok
 test_a_working_directory_inside_a_step_stops_every_command (test_checker.DocumentLinesInsideAStep.test_a_working_directory_inside_a_step_stops_every_command)
 D1 = A: ignored, it would run the step from a directory its author did not mean. ... ok
@@ -26,21 +54,57 @@ test_a_command_that_unexpectedly_succeeds_is_reported_at_step_two_only (test_che
 test_nothing_is_checked_without_execute (test_checker.ExpectedFailureDirective.test_nothing_is_checked_without_execute) ... ok
 test_the_wrong_nonzero_code_is_still_a_finding (test_checker.ExpectedFailureDirective.test_the_wrong_nonzero_code_is_still_a_finding)
 Any non-zero is not the same as the declared one. ... ok
+test_a_closing_fence_followed_by_spaces_or_a_tab_still_closes (test_checker.FencedCode.test_a_closing_fence_followed_by_spaces_or_a_tab_still_closes)
+The other half of review finding 7 (second review): trailing whitespace is common. ... ok
+test_a_fence_after_a_line_separator_is_not_a_fence (test_checker.FencedCode.test_a_fence_after_a_line_separator_is_not_a_fence)
+CommonMark sees one line, so no fence opens mid-line (review round 1, probe p6). ... ok
+test_a_fence_ends_the_elements_inventory (test_checker.FencedCode.test_a_fence_ends_the_elements_inventory) ... ok
+test_a_fence_line_with_an_info_string_does_not_close (test_checker.FencedCode.test_a_fence_line_with_an_info_string_does_not_close) ... ok
 test_a_fenced_document_line_before_the_first_step_is_not_read (test_checker.FencedCode.test_a_fenced_document_line_before_the_first_step_is_not_read) ... ok
+test_a_fenced_elements_heading_is_recorded (test_checker.FencedCode.test_a_fenced_elements_heading_is_recorded) ... ok
 test_a_fenced_run_is_not_a_command (test_checker.FencedCode.test_a_fenced_run_is_not_a_command) ... ok
 test_a_fenced_step_heading_is_not_a_step (test_checker.FencedCode.test_a_fenced_step_heading_is_not_a_step) ... ok
+test_a_form_feed_before_a_heading_still_starts_a_step (test_checker.FencedCode.test_a_form_feed_before_a_heading_still_starts_a_step)
+As in v0.3 (second review, finding 7): a page break must not hide a step. ... ok
+test_a_four_space_indented_closer_does_not_close (test_checker.FencedCode.test_a_four_space_indented_closer_does_not_close) ... ok
+test_a_four_space_indented_fence_is_not_a_fence (test_checker.FencedCode.test_a_four_space_indented_fence_is_not_a_fence) ... ok
+test_a_longer_closing_fence_closes (test_checker.FencedCode.test_a_longer_closing_fence_closes) ... ok
+test_a_non_breaking_space_after_a_fence_means_it_does_not_close (test_checker.FencedCode.test_a_non_breaking_space_after_a_fence_means_it_does_not_close)
+CommonMark allows only spaces or tabs after a closing fence (review finding 7). ... ok
 test_a_one_line_code_span_is_not_a_fence (test_checker.FencedCode.test_a_one_line_code_span_is_not_a_fence)
 ```x``` on one line is inline code; read as a fence it would swallow the document. ... ok
 test_a_shorter_or_different_fence_does_not_close_it (test_checker.FencedCode.test_a_shorter_or_different_fence_does_not_close_it) ... ok
 test_a_tilde_fence_and_an_indented_fence_are_fences_too (test_checker.FencedCode.test_a_tilde_fence_and_an_indented_fence_are_fences_too) ... ok
+test_a_tilde_fence_may_have_backticks_in_its_info_string (test_checker.FencedCode.test_a_tilde_fence_may_have_backticks_in_its_info_string) ... ok
 test_an_unclosed_fence_before_the_first_step_is_the_documents (test_checker.FencedCode.test_an_unclosed_fence_before_the_first_step_is_the_documents) ... ok
 test_an_unclosed_fence_is_recorded_where_it_opened (test_checker.FencedCode.test_an_unclosed_fence_is_recorded_where_it_opened) ... ok
+test_crlf_and_cr_line_endings_still_split_lines (test_checker.FencedCode.test_crlf_and_cr_line_endings_still_split_lines) ... ok
+test_only_commonmark_line_endings_split_lines (test_checker.FencedCode.test_only_commonmark_line_endings_split_lines)
+U+2028 is not a line ending, so the line numbers after it stay true. ... ok
 test_the_new_fields_are_appended_so_positional_callers_still_line_up (test_checker.FencedCode.test_the_new_fields_are_appended_so_positional_callers_still_line_up) ... ok
 test_a_fenced_run_is_never_executed_and_the_unfenced_one_is (test_checker.FencedCodeFindings.test_a_fenced_run_is_never_executed_and_the_unfenced_one_is) ... ok
 test_a_fenced_shell_line_inside_a_step_no_longer_refuses_the_document (test_checker.FencedCodeFindings.test_a_fenced_shell_line_inside_a_step_no_longer_refuses_the_document)
 KL-0256: a fenced Shell: example refused the whole document; now it is info only. ... ok
 test_an_unclosed_fence_before_any_step_is_reported_with_no_steps (test_checker.FencedCodeFindings.test_an_unclosed_fence_before_any_step_is_reported_with_no_steps) ... ok
 test_an_unclosed_fence_is_an_error_at_the_step_where_it_opened (test_checker.FencedCodeFindings.test_an_unclosed_fence_is_an_error_at_the_step_where_it_opened) ... ok
+test_fenced_lines_before_the_first_step_are_reported_at_the_document (test_checker.FencedCodeFindings.test_fenced_lines_before_the_first_step_are_reported_at_the_document) ... ok
+test_a_fence_closed_less_indented_than_its_opener_is_misaligned (test_checker.FencesInsideContainers.test_a_fence_closed_less_indented_than_its_opener_is_misaligned)
+The cost of the rule: valid at top level, refused because it could be list content. ... ok
+test_a_fence_line_inside_a_pre_block_is_not_a_fence (test_checker.FencesInsideContainers.test_a_fence_line_inside_a_pre_block_is_not_a_fence) ... ok
+test_a_list_fence_ends_with_its_item (test_checker.FencesInsideContainers.test_a_list_fence_ends_with_its_item)
+A line indented less than the item ends the item, and its fence (CommonMark). ... ok
+test_a_one_line_html_comment_opens_no_block (test_checker.FencesInsideContainers.test_a_one_line_html_comment_opens_no_block) ... ok
+test_a_wide_list_marker_reads_the_item_from_its_content_column (test_checker.FencesInsideContainers.test_a_wide_list_marker_reads_the_item_from_its_content_column)
+A closer 4 spaces in closes a "10. " item's fence, at the end of the document too. ... ok
+test_an_aligned_or_one_space_fence_is_not_misaligned (test_checker.FencesInsideContainers.test_an_aligned_or_one_space_fence_is_not_misaligned) ... ok
+test_an_indented_fence_with_content_at_column_0_is_misaligned (test_checker.FencesInsideContainers.test_an_indented_fence_with_content_at_column_0_is_misaligned)
+Third review, C2: in a list item that line ends the item and its fence. ... ok
+test_an_ordered_list_fence_closes_inside_its_item (test_checker.FencesInsideContainers.test_an_ordered_list_fence_closes_inside_its_item) ... ok
+test_e1_a_list_fence_left_open_then_an_open_example_runs_nothing (test_checker.FencesInsideContainers.test_e1_a_list_fence_left_open_then_an_open_example_runs_nothing) ... ok
+test_e2_a_list_fence_closed_at_column_0_runs_nothing (test_checker.FencesInsideContainers.test_e2_a_list_fence_closed_at_column_0_runs_nothing) ... ok
+test_e3_a_fence_line_inside_an_html_comment_is_not_a_fence (test_checker.FencesInsideContainers.test_e3_a_fence_line_inside_an_html_comment_is_not_a_fence) ... ok
+test_e3_with_the_example_left_open_runs_nothing (test_checker.FencesInsideContainers.test_e3_with_the_example_left_open_runs_nothing) ... ok
+test_f1_a_fence_opened_on_a_list_marker_line_is_a_fence (test_checker.FencesInsideContainers.test_f1_a_fence_opened_on_a_list_marker_line_is_a_fence) ... ok
 test_shell_unresolved_names_every_case_that_emits_it (test_checker.FindingDescriptions.test_shell_unresolved_names_every_case_that_emits_it)
 A reader shown 'unknown or missing' for a misplaced line looks in the wrong place. ... ok
 test_the_codes_added_in_0_4_are_described (test_checker.FindingDescriptions.test_the_codes_added_in_0_4_are_described) ... ok
@@ -90,6 +154,8 @@ test_at_least_one_fixture_produces_an_error (test_checker.TheSuiteCanActuallyFai
 test_the_good_fixture_and_a_bad_one_disagree (test_checker.TheSuiteCanActuallyFail.test_the_good_fixture_and_a_bad_one_disagree) ... ok
 test_a_timeout_in_the_platform_default_stops_the_command (test_checker.Timeouts.test_a_timeout_in_the_platform_default_stops_the_command) ... ok
 test_a_timeout_under_a_declared_shell_stops_the_command (test_checker.Timeouts.test_a_timeout_under_a_declared_shell_stops_the_command) ... ok
+test_a_fence_left_open_in_a_list_item_runs_neither_command (test_checker.UnclosedFenceStopsCommands.test_a_fence_left_open_in_a_list_item_runs_neither_command) ... ok
+test_an_unclosed_fence_stops_every_command (test_checker.UnclosedFenceStopsCommands.test_an_unclosed_fence_stops_every_command) ... ok
 test_a_document_with_nothing_to_run_never_asks (test_checker.UnresolvedShell.test_a_document_with_nothing_to_run_never_asks) ... ok
 test_a_shell_line_inside_a_step_is_refused_at_that_step (test_checker.UnresolvedShell.test_a_shell_line_inside_a_step_is_refused_at_that_step)
 Ignoring it would run bash commands in cmd.exe: the defect this directive removes. ... ok
@@ -104,7 +170,7 @@ test_without_execute_availability_is_never_checked (test_checker.UnresolvedShell
 The checking machine is not the reader's machine. ... ok
 
 ----------------------------------------------------------------------
-Ran 80 tests in 10.332s
+Ran 129 tests in 11.056s
 
 OK (skipped=13)
 unittest exit=0
