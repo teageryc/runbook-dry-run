@@ -72,6 +72,10 @@ FINDING_CODES = {
         "inside a step, two lines naming different shells, or, when a command would run, "
         "a shell this machine does not have; no command in the document is executed"
     ),
+    "FENCED_LINE_SKIPPED": (
+        "a line the parser would read sits inside fenced code, so it was not read"
+    ),
+    "FENCE_UNCLOSED": "a code fence never closes, so nothing after it was checked",
 }
 
 
@@ -651,6 +655,35 @@ def _gate_defect(step: Step, step_numbers: set[int]) -> Finding | None:
     return Finding(step.number, step.title, "MANUAL_GATE_UNRESOLVED", detail)
 
 
+def _fence_findings(
+    number: int, title: str, fenced: list[SourceLine], unclosed: SourceLine | None
+) -> list[Finding]:
+    """What fenced code hid: an unclosed fence (error), then each skipped line (info)."""
+    found = []
+    if unclosed is not None:
+        found.append(
+            Finding(
+                number,
+                title,
+                "FENCE_UNCLOSED",
+                f"the code fence opened at line {unclosed.number} never closes, so every "
+                "line after it is code and nothing after it was checked",
+            )
+        )
+    for skipped in fenced:
+        found.append(
+            Finding(
+                number,
+                title,
+                "FENCED_LINE_SKIPPED",
+                f"line {skipped.number} is inside fenced code and was not read: "
+                f"{skipped.text.strip()}",
+                severity=SEVERITY_INFO,
+            )
+        )
+    return found
+
+
 def check(
     book: Runbook,
     base_dir: str | None = None,
@@ -662,6 +695,7 @@ def check(
 
     if not book.steps:
         findings.append(Finding(0, "", "NO_STEPS", "the document declares no steps"))
+        findings.extend(_fence_findings(0, "", book.fenced_lines, book.unclosed_fence))
         return findings
 
     declared = book.working_directory
@@ -674,6 +708,7 @@ def check(
                 "no 'Working directory:' line, so no path in this document can be resolved",
             )
         )
+    findings.extend(_fence_findings(0, "", book.fenced_lines, book.unclosed_fence))
 
     # Every SHELL_UNRESOLVED stops all execution: falling back to the platform
     # default is the behaviour that produced three COMMAND_FAILED findings that
@@ -727,6 +762,9 @@ def check(
                     "first step, so no command in this document was executed",
                 )
             )
+        findings.extend(
+            _fence_findings(step.number, step.title, step.fenced_lines, step.unclosed_fence)
+        )
 
         if not step.failure_branch:
             findings.append(

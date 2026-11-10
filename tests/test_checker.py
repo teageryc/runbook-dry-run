@@ -804,5 +804,60 @@ class FencedCode(unittest.TestCase):
         self.assertEqual(([], None), (Runbook().fenced_lines, Runbook().unclosed_fence))
 
 
+class FencedCodeFindings(unittest.TestCase):
+    """Skipped means not run: a marker that must NOT appear beside one that must."""
+
+    MARKERS = [
+        os.path.join(REPO_ROOT, "fenced-marker.tmp"),
+        os.path.join(REPO_ROOT, "unfenced-marker.tmp"),
+    ]
+
+    def setUp(self):
+        for marker in self.MARKERS:
+            if os.path.exists(marker):
+                os.remove(marker)
+
+    tearDown = setUp
+
+    def test_a_fenced_run_is_never_executed_and_the_unfenced_one_is(self):
+        findings = run_fixture("fenced.md", execute=True)
+        self.assertFalse(os.path.exists(self.MARKERS[0]), "a fenced example was executed")
+        self.assertTrue(os.path.exists(self.MARKERS[1]), "the real command never ran")
+        self.assertEqual({"FENCED_LINE_SKIPPED"}, codes_at(findings, 1))
+        self.assertIn("line 9", findings[0].detail)
+        self.assertEqual("info", findings[0].severity)
+        self.assertFalse(has_errors(findings))
+
+    def test_an_unclosed_fence_is_an_error_at_the_step_where_it_opened(self):
+        text = (
+            "# Runbook: x\n\nWorking directory: `.`\n\n"
+            "## Step 1 - fine\nOn failure: stop.\n\n"
+            "## Step 2 - opens a fence\nOn failure: stop.\n```\n\n"
+            "## Step 3 - swallowed\nOn failure: stop.\n"
+        )
+        findings = check(parse(text), base_dir=REPO_ROOT)
+        self.assertEqual(set(), codes_at(findings, 1))
+        self.assertEqual({"FENCE_UNCLOSED", "FENCED_LINE_SKIPPED"}, codes_at(findings, 2))
+        self.assertEqual(set(), codes_at(findings, 3))
+        unclosed = [f for f in findings if f.code == "FENCE_UNCLOSED"]
+        self.assertEqual(1, len(unclosed))
+        self.assertIn("line 10", unclosed[0].detail)
+        self.assertTrue(has_errors(findings))
+
+    def test_an_unclosed_fence_before_any_step_is_reported_with_no_steps(self):
+        text = "# Runbook: x\n\nWorking directory: `.`\n~~~\n## Step 1 - x\n"
+        findings = check(parse(text), base_dir=REPO_ROOT)
+        self.assertEqual(
+            {"NO_STEPS", "FENCE_UNCLOSED", "FENCED_LINE_SKIPPED"}, codes_at(findings, 0)
+        )
+
+    def test_a_fenced_shell_line_inside_a_step_no_longer_refuses_the_document(self):
+        """KL-0256: a fenced Shell: example refused the whole document; now it is info only."""
+        text = one_step("", f"{FENCE}\nShell: `bash`\n{FENCE}\nRun: `exit 0`")
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertEqual({"FENCED_LINE_SKIPPED"}, codes_at(findings, 1))
+        self.assertFalse(has_errors(findings))
+
+
 if __name__ == "__main__":
     unittest.main()
