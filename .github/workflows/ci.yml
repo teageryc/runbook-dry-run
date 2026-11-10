@@ -115,3 +115,42 @@ jobs:
             echo "a command ran under a shell that could not be resolved"
             exit 1
           fi
+
+      - name: A fenced example is never executed, and the real command is
+        run: |
+          python -m runbook_dry_run tests/fixtures/fenced.md --base-dir . --execute
+          if [ -f fenced-marker.tmp ]; then
+            echo "a command shown inside fenced code was executed"
+            exit 1
+          fi
+          if [ ! -f unfenced-marker.tmp ]; then
+            echo "the unfenced command never ran, so the clean report means nothing"
+            exit 1
+          fi
+          rm -f unfenced-marker.tmp
+
+      - name: An unclosed fence exits 1
+        run: |
+          set +e
+          python -m runbook_dry_run tests/fixtures/bad-unclosed-fence.md --base-dir .
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then
+            echo "expected exit 1 from an unclosed fence, got $code"
+            exit 1
+          fi
+
+      - name: A working directory inside a step exits 1 and runs nothing
+        run: |
+          set +e
+          python -m runbook_dry_run tests/fixtures/bad-step-directory.md --base-dir . --execute
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then
+            echo "expected exit 1 from a working directory inside a step, got $code"
+            exit 1
+          fi
+          if [ -f step-line-marker.tmp ]; then
+            echo "a command ran despite a misplaced Working directory:"
+            exit 1
+          fi
