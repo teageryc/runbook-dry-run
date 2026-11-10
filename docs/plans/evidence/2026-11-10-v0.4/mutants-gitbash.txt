@@ -1,4 +1,5 @@
 console output page at start: 437
+control: 23 named tests pass unmutated
 killed: 1 any fence closes any fence (1 of 1 red, 0 skipped)
 killed: 2 a one-line code span opens a fence (1 of 1 red, 0 skipped)
 killed: 3 nothing the fence hid is reported (3 of 3 red, 0 skipped)
@@ -6,3 +7,17 @@ killed: 4 a misplaced working directory lets commands run (1 of 1 red, 0 skipped
 killed: 5 the console pages are not kept (1 of 1 red, 0 skipped)
 killed: 5b only the output page is kept (1 of 1 red, 0 skipped)
 killed: 6 the pages are reset after each command (1 of 1 red, 0 skipped)
+killed: 7 an unclosed fence lets commands run (2 of 2 red, 0 skipped)
+killed: 8 a fence closes before a non-breaking space (1 of 1 red, 0 skipped)
+killed: 9 lines split on every Unicode line break (1 of 1 red, 0 skipped)
+killed: A a fence opens at any indentation (1 of 1 red, 0 skipped)
+killed: H a fence closes at any indentation (1 of 1 red, 0 skipped)
+killed: B a fence line with text after it closes (1 of 1 red, 0 skipped)
+killed: C only an equally long fence closes (1 of 1 red, 0 skipped)
+killed: E the backtick rule applies to tilde fences (1 of 1 red, 0 skipped)
+killed: F a fence does not end the Elements inventory (1 of 1 red, 0 skipped)
+killed: I a fenced Elements: is not recorded (1 of 1 red, 0 skipped)
+killed: D fenced lines before the first step are not reported (1 of 1 red, 0 skipped)
+killed: G a misplaced working directory stops only its own step (1 of 1 red, 0 skipped)
+killed: K a working directory after a command is not caught (1 of 1 red, 0 skipped)
+killed: J the shell is asked for despite a misplaced working directory (1 of 1 red, 0 skipped)

@@ -823,6 +823,42 @@ class FencedCode(unittest.TestCase):
             self.assertEqual(["b"], book.steps[0].commands, msg=repr(ending))
             self.assertEqual([(7, "Run: `a`")], book.steps[0].fenced_lines, msg=repr(ending))
 
+    # Review round 1, finding 3: one guard per fence rule the spec states.
+
+    def test_a_four_space_indented_fence_is_not_a_fence(self):
+        book = parse(fenced_doc("    ```", "Run: `a`", "    ```"))
+        self.assertEqual(["a"], book.steps[0].commands)
+        self.assertEqual([], book.steps[0].fenced_lines)
+
+    def test_a_four_space_indented_closer_does_not_close(self):
+        book = parse(fenced_doc(FENCE, "    ```", "Run: `a`", FENCE, "Run: `b`"))
+        self.assertEqual(["b"], book.steps[0].commands)
+        self.assertEqual([8], [line.number for line in book.steps[0].fenced_lines])
+
+    def test_a_fence_line_with_an_info_string_does_not_close(self):
+        book = parse(fenced_doc(FENCE, "```bash", "Run: `a`", FENCE, "Run: `b`"))
+        self.assertEqual(["b"], book.steps[0].commands)
+
+    def test_a_longer_closing_fence_closes(self):
+        book = parse(fenced_doc(FENCE, "Run: `a`", "`````", "Run: `b`"))
+        self.assertEqual(["b"], book.steps[0].commands)
+
+    def test_a_tilde_fence_may_have_backticks_in_its_info_string(self):
+        book = parse(fenced_doc("~~~ `x`", "Run: `a`", "~~~", "Run: `b`"))
+        self.assertEqual(["b"], book.steps[0].commands)
+        self.assertEqual([7], [line.number for line in book.steps[0].fenced_lines])
+
+    def test_a_fence_ends_the_elements_inventory(self):
+        text = (
+            "# Runbook: x\n\nWorking directory: `.`\n\nElements:\n- Save\n"
+            "```\n- Fenced\n```\n- After\n\n## Step 1 - x\nOn failure: stop.\n"
+        )
+        self.assertEqual(["Save"], parse(text).element_inventory)
+
+    def test_a_fenced_elements_heading_is_recorded(self):
+        book = parse(fenced_doc(FENCE, "Elements:", FENCE))
+        self.assertEqual([(7, "Elements:")], book.steps[0].fenced_lines)
+
     def test_the_new_fields_are_appended_so_positional_callers_still_line_up(self):
         step = Step(1, "t", ["echo a"])
         self.assertEqual(["echo a"], step.commands)
@@ -876,6 +912,12 @@ class FencedCodeFindings(unittest.TestCase):
         self.assertEqual(
             {"NO_STEPS", "FENCE_UNCLOSED", "FENCED_LINE_SKIPPED"}, codes_at(findings, 0)
         )
+
+    def test_fenced_lines_before_the_first_step_are_reported_at_the_document(self):
+        text = fenced_doc("Run: `x`", before="```\nRun: `example`\n```")
+        findings = check(parse(text), base_dir=REPO_ROOT)
+        self.assertEqual({"FENCED_LINE_SKIPPED"}, codes_at(findings, 0))
+        self.assertEqual(set(), codes_at(findings, 1))
 
     def test_a_fenced_shell_line_inside_a_step_no_longer_refuses_the_document(self):
         """KL-0256: a fenced Shell: example refused the whole document; now it is info only."""
@@ -1017,6 +1059,38 @@ class DocumentLinesInsideAStep(unittest.TestCase):
             os.path.exists(self.MARKER), "a command ran despite a misplaced Working directory:"
         )
         self.assertIn("no command in this document was executed", findings[0].detail)
+
+    def test_a_misplaced_working_directory_stops_commands_in_other_steps_too(self):
+        """D1 says every command in the document, not only the step's own."""
+        text = (
+            "# Runbook: x\n\nWorking directory: `.`\n\n"
+            f"## Step 1 - runs first\n{self.WRITE}\nOn failure: stop.\n\n"
+            "## Step 2 - too late\nWorking directory: `elsewhere`\nOn failure: stop.\n"
+        )
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertFalse(os.path.exists(self.MARKER), "step 1's command ran")
+        self.assertEqual({"DOCUMENT_LINE_IN_STEP"}, codes_at(findings, 2))
+
+    def test_a_working_directory_after_a_command_is_still_caught(self):
+        text = (
+            "# Runbook: x\n\nWorking directory: `.`\n\n"
+            f"## Step 1 - command first\n{self.WRITE}\nWorking directory: `elsewhere`\n"
+            "On failure: stop.\n"
+        )
+        findings = check(parse(text), base_dir=REPO_ROOT)
+        self.assertEqual({"DOCUMENT_LINE_IN_STEP"}, codes_at(findings, 1))
+        self.assertIn("line 7", findings[0].detail)
+
+    def test_a_misplaced_working_directory_never_asks_for_the_shell(self):
+        text = self.two_steps("Working directory: `elsewhere`").replace(
+            "Working directory: `.`\n", "Working directory: `.`\nShell: `bash`\n", 1
+        )
+        with mock.patch(
+            "runbook_dry_run.checker.resolve_shell", return_value=(None, "bash is not on PATH")
+        ) as resolve:
+            findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        resolve.assert_not_called()
+        self.assertEqual({"DOCUMENT_LINE_IN_STEP"}, codes_at(findings, 2))
 
     def test_an_elements_line_inside_a_step_does_not_stop_commands(self):
         check(parse(self.two_steps("Elements:")), base_dir=REPO_ROOT, execute=True)
