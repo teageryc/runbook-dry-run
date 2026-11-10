@@ -38,7 +38,7 @@
 
 **I do not know what a fenced code block is.** *(Added 2026-11-03, v0.3.)* A line inside a fenced code block is read like any other line. A `Run:` line shown there as an example is a command, and `--execute` runs it; a `Shell:` line shown there inside a step refuses the whole document. A line that starts with a space is never read as a directive, so indent an example, or change its directive word.
 
-> **Corrected 2026-11-10 (v0.4)** — fenced code is now known. A line inside a backtick or tilde fence is not read; each one that would have been is reported as `FENCED_LINE_SKIPPED`, and a fence that never closes is `FENCE_UNCLOSED`, an error. What remains: a directive inside an HTML comment (`<!-- … -->`) is still read, though a rendered page hides it.
+> **Corrected 2026-11-10 (v0.4)** — fenced code is now known. A line inside a backtick or tilde fence is not read; each one that would have been is reported as `FENCED_LINE_SKIPPED`, and a fence that never closes is `FENCE_UNCLOSED`, an error, after which I run nothing. What remains: a directive inside an HTML comment (`<!-- … -->`) is still read, though a rendered page hides it. I do not model list items, block quotes or HTML blocks either: a fence a renderer closes where its list item ends stays open for me, so I report `FENCE_UNCLOSED` and run nothing, and the line I name may be far from the mistake.
 
 **A document-level line written inside a step is ignored.** *(Added 2026-11-03, v0.3.)* `Working directory:` and `Elements:` belong before the first step. Written inside one, they are dropped without a word, and that step's paths still resolve from the document's working directory. Only `Shell:` is refused there, because ignoring it would change the shell every command runs in.
 
@@ -88,7 +88,7 @@
 
 **我不知道什么是围栏代码块。**（2026-11-03 补记，v0.3）围栏代码块里的一行，和别的行一样被读取。作为示例写在那里的 `Run:` 行就是一条命令，`--execute` 会运行它；写在某个步骤里的示例 `Shell:` 行会让整份文档被拒绝。以空格开头的行永远不会被读成指令，所以请把示例缩进，或者改掉它的指令词。
 
-> **2026-11-10 更正（v0.4）** —— 现在认得围栏代码块了。反引号或波浪号围栏里的行不会被读取；其中每一条本会被读取的行都报为 `FENCED_LINE_SKIPPED`，没有关闭的围栏报为 `FENCE_UNCLOSED`，属于错误。仍然存在的局限：HTML 注释（`<!-- … -->`）里的指令依然会被读取，尽管渲染后的页面看不见它。
+> **2026-11-10 更正（v0.4）** —— 现在认得围栏代码块了。反引号或波浪号围栏里的行不会被读取；其中每一条本会被读取的行都报为 `FENCED_LINE_SKIPPED`，没有关闭的围栏报为 `FENCE_UNCLOSED`，属于错误，此后我什么都不运行。仍然存在的局限：HTML 注释（`<!-- … -->`）里的指令依然会被读取，尽管渲染后的页面看不见它。我也不模拟列表项、引用块和 HTML 块：渲染器在列表项结束处关闭的围栏，对我来说仍然开着，于是我报出 `FENCE_UNCLOSED` 并且什么都不运行，而我点出的那一行可能离真正的错误很远。
 
 **写在步骤里的文档级行会被忽略。**（2026-11-03 补记，v0.3）`Working directory:` 和 `Elements:` 应该写在第一步之前。写在某一步里时，它们会被悄无声息地丢掉，那一步的路径仍然从文档的工作目录解析。只有 `Shell:` 写在那里会被拒绝，因为忽略它会改变每一条命令运行所用的 shell。
 
