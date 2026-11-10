@@ -985,6 +985,7 @@ class DocumentLinesInsideAStep(unittest.TestCase):
         text = self.two_steps("Working directory: `elsewhere`")
         findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
         self.assertNotIn("SHELL_UNRESOLVED", {f.code for f in findings})
+        self.assertEqual({"DOCUMENT_LINE_IN_STEP"}, codes_at(findings, 2))
 
     def test_a_working_directory_inside_a_step_stops_every_command(self):
         """D1 = A: ignored, it would run the step from a directory its author did not mean."""
@@ -1020,9 +1021,11 @@ class ConsoleCodePage(unittest.TestCase):
         self.start_input = self.kernel32.GetConsoleCP()
         if not self.start:
             self.skipTest("no console attached, so there is no code page to keep")
+        # A page the console is not already in, or a run that started there would skip.
+        self.target = 437 if self.start == 850 else 850
         # Positive control: in this launch context a child's chcp must move the page,
         # or the first test cannot fail and proves nothing.
-        subprocess.run("chcp 850>nul", shell=True)
+        subprocess.run(f"chcp {self.target}>nul", shell=True)
         moved = self.kernel32.GetConsoleOutputCP()
         self.tearDown()
         if moved == self.start:
@@ -1036,7 +1039,7 @@ class ConsoleCodePage(unittest.TestCase):
         return self.kernel32.GetConsoleCP(), self.kernel32.GetConsoleOutputCP()
 
     def test_a_chcp_in_a_command_does_not_outlive_the_check(self):
-        text = one_step("Shell: `cmd`", "Run: `chcp 850>nul`")
+        text = one_step("Shell: `cmd`", f"Run: `chcp {self.target}>nul`")
         findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
         self.assertEqual([], findings, msg=f"unexpected findings: {findings}")
         self.assertEqual((self.start_input, self.start), self.pages())
