@@ -39,6 +39,9 @@ BACKTICKED = re.compile(r"`([^`]+)`")
 # ```x``` on one line is inline code, not a fence that runs to the end.
 FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 FENCE_CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})$")
+# CommonMark's line endings, and nothing else: str.splitlines() also splits on
+# U+2028, U+0085 and form feed, which shifted every reported line number after one.
+LINE_ENDING = re.compile(r"\r\n|\r|\n")
 
 # `Shell:` names as a reader writes them (matched case-insensitively), mapped to
 # the shell each one means. The single source for the names the tool accepts.
@@ -240,18 +243,21 @@ def parse(text: str) -> Runbook:
     fence: str | None = None
     fence_opened: SourceLine | None = None
 
-    for number, raw in enumerate(text.splitlines(), start=1):
+    for number, raw in enumerate(LINE_ENDING.split(text), start=1):
         line = raw.rstrip()
+        # Only spaces and tabs may follow a closing fence (CommonMark): a fence line
+        # ending in a non-breaking space, as Word pastes it, does not close one.
+        fence_line = raw.rstrip(" \t")
 
         if fence is not None:
-            if _closes_fence(line, fence):
+            if _closes_fence(fence_line, fence):
                 fence = None
             elif _would_be_read(line):
                 owner = current.fenced_lines if current is not None else book.fenced_lines
                 owner.append(SourceLine(number, line))
             continue
 
-        opened = _opens_fence(line)
+        opened = _opens_fence(fence_line)
         if opened is not None:
             fence, fence_opened = opened, SourceLine(number, line)
             in_elements = False

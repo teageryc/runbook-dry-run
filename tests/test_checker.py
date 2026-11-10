@@ -801,6 +801,28 @@ class FencedCode(unittest.TestCase):
         self.assertEqual(".", book.working_directory)
         self.assertIsNone(book.shell)
 
+    def test_a_non_breaking_space_after_a_fence_means_it_does_not_close(self):
+        """CommonMark allows only spaces or tabs after a closing fence (review finding 7).
+
+        Word and Confluence paste U+00A0; read as a close, a line a renderer shows as
+        code ran under --execute.
+        """
+        book = parse(fenced_doc(FENCE, "Run: `a`", "``` ", "Run: `b`", FENCE, "Run: `c`"))
+        self.assertEqual(["c"], book.steps[0].commands)
+        self.assertEqual([7, 9], [line.number for line in book.steps[0].fenced_lines])
+
+    def test_only_commonmark_line_endings_split_lines(self):
+        """U+2028 is not a line ending, so the line numbers after it stay true."""
+        book = parse(fenced_doc("text more", FENCE, "Run: `x`", FENCE))
+        self.assertEqual([(8, "Run: `x`")], book.steps[0].fenced_lines)
+
+    def test_crlf_and_cr_line_endings_still_split_lines(self):
+        text = fenced_doc(FENCE, "Run: `a`", FENCE, "Run: `b`")
+        for ending in ("\r\n", "\r"):
+            book = parse(text.replace("\n", ending))
+            self.assertEqual(["b"], book.steps[0].commands, msg=repr(ending))
+            self.assertEqual([(7, "Run: `a`")], book.steps[0].fenced_lines, msg=repr(ending))
+
     def test_the_new_fields_are_appended_so_positional_callers_still_line_up(self):
         step = Step(1, "t", ["echo a"])
         self.assertEqual(["echo a"], step.commands)
