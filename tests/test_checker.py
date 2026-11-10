@@ -1034,7 +1034,10 @@ class CommandLineOutput(unittest.TestCase):
             path = self.cjk_runbook(folder)
             stream = AsciiOnly()
             with mock.patch("sys.stdout", stream):
-                code = cli_main([path, "--base-dir", REPO_ROOT])
+                try:
+                    code = cli_main([path, "--base-dir", REPO_ROOT])
+                except UnicodeEncodeError as exc:  # the defect itself, so a failure
+                    self.fail(f"the report crashed instead of escaping: {exc}")
         self.assertEqual(0, code)
         self.assertIn("step 1", "".join(stream.parts))
         self.assertIn("\\u4e2d\\u6587", "".join(stream.parts))
@@ -1309,9 +1312,10 @@ class ContainerEdgesThirdReview(unittest.TestCase):
         self.assertEqual(["b"], book.steps[0].commands)
 
     def test_five_spaces_after_a_list_marker_is_indented_code_not_a_fence(self):
-        book = parse(fenced_doc("-     ```", "Run: `a`"))
-        self.assertEqual(["a"], book.steps[0].commands)
+        """The document ends inside the item, so no later line can end a fence by accident."""
+        book = parse(self.HEAD + "## Step 1 - x\nOn failure: stop.\n\n-     ```\n      shown\n")
         self.assertIsNone(book.steps[0].unclosed_fence)
+        self.assertEqual("stop.", book.steps[0].failure_branch)
 
     def test_a_tab_indented_line_stays_inside_its_list_fence(self):
         """Tabs are 4-column stops (CommonMark): a Makefile recipe line inside "- ```make"."""

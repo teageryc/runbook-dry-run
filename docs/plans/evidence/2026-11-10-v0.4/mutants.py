@@ -12,6 +12,8 @@ control runs every named test unmutated twice: as imported, and through the
 source path with no edit, so a break in that path cannot pass for a kill. Only
 assertion failures count as kills; an error is reported as not killed.
 Mutants A to K are the first review's surviving source mutants, re-made here.
+Mutant 11 (strip spaces but not tabs) was dropped in v4: fence lines are
+tab-expanded first, so it is equivalent and no test could kill it.
 """
 
 import contextlib
@@ -114,16 +116,20 @@ def printable_regardless_and_never_restored():
 ORIGINAL_RUN = checker._run
 
 
+def write_without_escaping(text, stream=None):
+    print(text, file=stream or sys.stdout)
+
+
 def run_resetting_the_pages_each_command(*args, **kwargs):
     with checker._console_pages_kept():
         return ORIGINAL_RUN(*args, **kwargs)
 
 
-STRIP_SPACES_AND_TABS = 'fence_line = physical.rstrip(" ' + BS + 't")'
-FC, FF, UF, DL, CP, FI, CL = ("test_checker." + c + "." for c in (
+STRIP_SPACES_AND_TABS = 'fence_line = physical.expandtabs(4).rstrip(" ' + BS + 't")'
+FC, FF, UF, DL, CP, FI, CL, TR = ("test_checker." + c + "." for c in (
     "FencedCode", "FencedCodeFindings", "UnclosedFenceStopsCommands",
     "DocumentLinesInsideAStep", "ConsoleCodePage", "FencesInsideContainers",
-    "CommandLineOutput"))
+    "CommandLineOutput", "ContainerEdgesThirdReview"))
 MUTANTS = [
     ("1 any fence closes any fence",
      lambda: attribute("_closes_fence", lambda line, fence: bool(checker.FENCE_CLOSE.match(line))),
@@ -151,27 +157,26 @@ MUTANTS = [
      lambda: attribute("_has_unclosed_fence", lambda book: False),
      [UF + "test_an_unclosed_fence_stops_every_command"]),
     ("8 a fence closes before a non-breaking space",
-     lambda: source((STRIP_SPACES_AND_TABS, "fence_line = physical.rstrip()")),
+     lambda: source((STRIP_SPACES_AND_TABS, "fence_line = physical.expandtabs(4).rstrip()")),
      [FC + "test_a_non_breaking_space_after_a_fence_means_it_does_not_close"]),
     ("9 lines split on every Unicode line break",
      lambda: source(("LINE_ENDING.split(text)", "text.splitlines()")),
      [FC + "test_only_commonmark_line_endings_split_lines",
       FC + "test_a_fence_after_a_line_separator_is_not_a_fence"]),
     ("10 fence lines keep their trailing whitespace",
-     lambda: source((STRIP_SPACES_AND_TABS, "fence_line = physical")),
-     [FC + "test_a_closing_fence_followed_by_spaces_or_a_tab_still_closes"]),
-    ("11 fence lines lose trailing spaces but not tabs",
-     lambda: source((STRIP_SPACES_AND_TABS, 'fence_line = physical.rstrip(" ")')),
+     lambda: source((STRIP_SPACES_AND_TABS, "fence_line = physical.expandtabs(4)")),
      [FC + "test_a_closing_fence_followed_by_spaces_or_a_tab_still_closes"]),
     ("12 a misaligned fence lets commands run",
      lambda: attribute("_has_misaligned_fence", lambda book: False),
      [FI + "test_e1_a_list_fence_left_open_then_an_open_example_runs_nothing",
       FI + "test_e2_a_list_fence_closed_at_column_0_runs_nothing"]),
-    ("13 a misaligned close is not recorded",
-     lambda: source(("                    owner.misaligned_fences.append((fence_opened, "
-                     "SourceLine(number, line)))\n", "                    pass\n")),
-     [FI + "test_a_fence_closed_less_indented_than_its_opener_is_misaligned",
-      FI + "test_e2_a_list_fence_closed_at_column_0_runs_nothing"]),
+    ("13 an indented fence ignores a line indented less",
+     lambda: source(("            if fence is not None and not list_fence and fence_indent >= 2 and (\n",
+                     "            if False and (\n")),
+     [FI + "test_an_indented_fence_with_content_at_column_0_is_misaligned",
+      FI + "test_a_fence_closed_less_indented_than_its_opener_is_misaligned",
+      FI + "test_e2_a_list_fence_closed_at_column_0_runs_nothing",
+      TR + "test_r1_list_fence_content_at_column_0_runs_nothing"]),
     ("14 a fence on a list-marker line is not a fence",
      lambda: attribute("LIST_FENCE_OPEN", re.compile(r"(?!)")),
      [FI + "test_f1_a_fence_opened_on_a_list_marker_line_is_a_fence",
@@ -198,6 +203,44 @@ MUTANTS = [
     ("20 the output streams are switched and never put back",
      lambda: attribute("_printable_output", printable_regardless_and_never_restored, cli),
      [CL + "test_main_puts_the_streams_back"]),
+    ("21 an HTML block ignores its list item's end",
+     lambda: source(("            elif html_end is not None and html_indent >= 2 and "
+                     "_indent(fence_line) < html_indent:\n", "            elif False:\n")),
+     [TR + "test_r2b_a_pre_block_ended_by_its_list_item_runs_nothing"]),
+    ("22 lines inside an HTML block are read",
+     lambda: source(("                owner.fenced_lines.append(SourceLine(number, line))\n"
+                     "            continue\n\n        html_end = _html_block(fence_line)\n",
+                     "                owner.fenced_lines.append(SourceLine(number, line))\n\n"
+                     "        html_end = _html_block(fence_line)\n")),
+     [TR + "test_r6_a_command_inside_a_pre_block_is_not_read",
+      TR + "test_a_command_inside_an_html_comment_is_not_read"]),
+    ("23 an HTML block that never closes does not refuse",
+     lambda: source(("    if fence is not None or html_end is not None:\n", "    if fence is not None:\n")),
+     [TR + "test_an_html_block_that_never_closes_stops_every_command"]),
+    ("24 Unicode whitespace counts as blank",
+     lambda: source(('blank = not fence_line.strip(" ' + BS + 't")', "blank = not fence_line.strip()")),
+     [TR + "test_r3_a_non_breaking_space_line_ends_a_list_item"]),
+    ("25 a tab is one column",
+     lambda: source((STRIP_SPACES_AND_TABS, 'fence_line = physical.rstrip(" ' + BS + 't")')),
+     [TR + "test_a_tab_indented_line_stays_inside_its_list_fence"]),
+    ("26 a blank line ends a list fence",
+     lambda: source(("if list_fence and fence is not None and not blank and _indent(fence_line) < fence_indent:",
+                     "if list_fence and fence is not None and _indent(fence_line) < fence_indent:")),
+     [TR + "test_a_blank_line_inside_a_list_fence_does_not_end_it"]),
+    ("27 HTML blocks of types 3 to 5 are not known",
+     lambda: attribute("HTML_BLOCKS", checker.HTML_BLOCKS[:2]),
+     [TR + "test_html_blocks_of_types_3_to_5_hide_fence_lines"]),
+    ("28 any number of spaces may follow a list marker",
+     lambda: attribute("LIST_FENCE_OPEN",
+                       re.compile(r"^( {0,3}(?:[-*+]|\d{1,9}[.)]) {1,})(`{3,}|~{3,})(.*)$")),
+     [TR + "test_five_spaces_after_a_list_marker_is_indented_code_not_a_fence"]),
+    ("29 </pre> never ends a pre block",
+     lambda: attribute("HTML_BLOCKS",
+                       [(checker.HTML_BLOCKS[0][0], re.compile(r"(?!)"))] + checker.HTML_BLOCKS[1:]),
+     [TR + "test_a_fence_after_a_pre_block_is_a_fence"]),
+    ("30 a stream that cannot be reconfigured gets unescaped text",
+     lambda: attribute("_write", write_without_escaping, cli),
+     [CL + "test_a_stream_that_cannot_be_reconfigured_still_gets_the_report"]),
     ("A a fence opens at any indentation",
      lambda: attribute("FENCE_OPEN", re.compile(r"^\s*(`{3,}|~{3,})(.*)$")),
      [FC + "test_a_four_space_indented_fence_is_not_a_fence"]),
@@ -214,9 +257,9 @@ MUTANTS = [
      lambda: attribute("_opens_fence", opens_without_backticks_in_any_info),
      [FC + "test_a_tilde_fence_may_have_backticks_in_its_info_string"]),
     ("F a fence does not end the Elements inventory",
-     lambda: source(("                fence_opened = SourceLine(number, line)\n"
-                     "                in_elements = False\n",
-                     "                fence_opened = SourceLine(number, line)\n")),
+     lambda: source(("            fence_opened, flagged = SourceLine(number, line), False\n"
+                     "            in_elements = False\n",
+                     "            fence_opened, flagged = SourceLine(number, line), False\n")),
      [FC + "test_a_fence_ends_the_elements_inventory"]),
     ("I a fenced Elements: is not recorded",
      lambda: attribute("_READ_LINES", (checker.STEP_HEADING, checker.DIRECTIVE,
