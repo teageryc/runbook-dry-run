@@ -42,6 +42,8 @@
 
 **A command that changes the console's code page is read in the old one.** *(Added 2026-11-03, v0.3.)* On Windows I read `cmd.exe` and PowerShell output in the console's output code page as it was when the command started. A command that runs `chcp` changes the page its own later output arrives in, and a non-ASCII detail then reads wrongly; the exit code and the finding do not change.
 
+> **Corrected 2026-11-10 (v0.4)** — measured, and partly wrong as first written. A one-line command keeps the page cmd.exe started with for the rest of the line, so its output is read correctly, and a character that page cannot hold becomes `?` inside cmd.exe before I see it. Only a script the command runs writes its later lines in the new page, and those I read in the old one, wrongly. The bytes do not say which happened, so I read every command in the page it starts with. Since v0.4 I also put both of the console's code pages, input and output, back when the check ends: a command's `chcp` used to stay in your terminal after I exited.
+
 **It cannot judge a step that requires a human decision.** "Compare the two figures and decide whether to proceed" is checkable only for its failure branch. Whether the reader can actually make that judgement is exactly what a walk-through is for, and that is the thing I most want to be understood as not replacing.
 
 ---
@@ -85,5 +87,7 @@
 **写在步骤里的文档级行会被忽略。**（2026-11-03 补记，v0.3）`Working directory:` 和 `Elements:` 应该写在第一步之前。写在某一步里时，它们会被悄无声息地丢掉，那一步的路径仍然从文档的工作目录解析。只有 `Shell:` 写在那里会被拒绝，因为忽略它会改变每一条命令运行所用的 shell。
 
 **改变控制台代码页的命令，会按旧代码页读取。**（2026-11-03 补记，v0.3）在 Windows 上，我按命令启动时控制台的输出代码页读取 `cmd.exe` 和 PowerShell 的输出。一条运行了 `chcp` 的命令会改变它自己后续输出所用的代码页，于是非 ASCII 的细节会读错；退出码和发现不受影响。
+
+> **2026-11-10 更正（v0.4）** —— 经过实测，原先的写法部分不对。一行命令在这一行剩下的部分里，沿用 cmd.exe 启动时的代码页，所以它的输出读得正确；那个代码页装不下的字符，在我看到之前就已经在 cmd.exe 里变成了 `?`。只有命令所运行的脚本，才会把后面的行按新代码页写出，而这些行我按旧代码页读，读错了。从字节上看不出是哪一种，所以我按每条命令启动时的代码页读它。从 v0.4 起，检查结束时我还会把控制台的两个代码页（输入和输出）都改回原样：以前，命令里的 `chcp` 会在我退出后仍然留在你的终端里。
 
 **它无法判断需要人做决定的步骤。**「比较两个数字并决定是否继续」——我只能检查它的失败分支。读者是否真的做得出那个判断，恰恰是走一遍流程要回答的问题，而这正是我最希望被理解为"本工具不替代"的那件事。
