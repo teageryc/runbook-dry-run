@@ -1,0 +1,8 @@
+console output page at start: 65001
+killed: 1 any fence closes any fence (1 of 1 red, 0 skipped)
+killed: 2 a one-line code span opens a fence (1 of 1 red, 0 skipped)
+killed: 3 nothing the fence hid is reported (3 of 3 red, 0 skipped)
+killed: 4 a misplaced working directory lets commands run (1 of 1 red, 0 skipped)
+killed: 5 the console pages are not kept (1 of 1 red, 0 skipped)
+killed: 5b only the output page is kept (1 of 1 red, 0 skipped)
+SURVIVED: 6 the pages are reset after each command (0 of 1 red, 0 skipped)
