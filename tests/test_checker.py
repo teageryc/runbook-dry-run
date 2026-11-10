@@ -489,6 +489,10 @@ class FindingDescriptions(unittest.TestCase):
         for case in ("does not know", "inside a step", "different shells", "does not have"):
             self.assertIn(case, description)
 
+    def test_the_codes_added_in_0_4_are_described(self):
+        for code in ("FENCED_LINE_SKIPPED", "FENCE_UNCLOSED", "DOCUMENT_LINE_IN_STEP"):
+            self.assertIn(code, FINDING_CODES)
+
 
 class ProcessPlacement(unittest.TestCase):
     """v0.2 ran every command in the checker's own session and process group.
@@ -857,6 +861,72 @@ class FencedCodeFindings(unittest.TestCase):
         findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
         self.assertEqual({"FENCED_LINE_SKIPPED"}, codes_at(findings, 1))
         self.assertFalse(has_errors(findings))
+
+
+class DocumentLinesInsideAStep(unittest.TestCase):
+    """Working directory: and Elements: belong before the first step (decision C2, KL-0277)."""
+
+    MARKER = os.path.join(REPO_ROOT, "step-line-marker.tmp")
+    WRITE = "Run: `python -c \"open('step-line-marker.tmp', 'w').close()\"`"
+
+    def setUp(self):
+        if os.path.exists(self.MARKER):
+            os.remove(self.MARKER)
+
+    tearDown = setUp
+
+    def two_steps(self, line: str) -> str:
+        """Step 2 holds `line` at line 12, then a command that writes the marker."""
+        return (
+            "# Runbook: x\n\nWorking directory: `.`\n\nElements:\n- Save\n\n"
+            "## Step 1 - fine\nOn failure: stop.\n\n"
+            f"## Step 2 - the line under test\n{line}\n{self.WRITE}\nOn failure: stop.\n"
+        )
+
+    def test_a_working_directory_inside_a_step_is_an_error_at_that_step(self):
+        text = self.two_steps("Working directory: `elsewhere`")
+        findings = check(parse(text), base_dir=REPO_ROOT)
+        self.assertEqual(set(), codes_at(findings, 1))
+        self.assertEqual({"DOCUMENT_LINE_IN_STEP"}, codes_at(findings, 2))
+        self.assertIn("line 12", findings[0].detail)
+        self.assertTrue(has_errors(findings))
+
+    def test_an_elements_line_inside_a_step_is_an_error_at_that_step(self):
+        findings = check(parse(self.two_steps("Elements:")), base_dir=REPO_ROOT)
+        self.assertEqual({"DOCUMENT_LINE_IN_STEP"}, codes_at(findings, 2))
+        self.assertIn("inventory", findings[0].detail)
+
+    def test_the_same_lines_before_the_first_step_report_nothing(self):
+        text = (
+            "# Runbook: x\n\nWorking directory: `.`\n\nElements:\n- Save\n\n"
+            "## Step 1 - fine\nOn failure: stop.\n"
+        )
+        self.assertEqual([], check(parse(text), base_dir=REPO_ROOT))
+
+    def test_the_same_line_fenced_inside_a_step_is_only_skipped(self):
+        text = self.two_steps("```\nWorking directory: `elsewhere`\n```")
+        findings = check(parse(text), base_dir=REPO_ROOT)
+        self.assertEqual({"FENCED_LINE_SKIPPED"}, codes_at(findings, 2))
+        self.assertFalse(has_errors(findings))
+
+    def test_it_is_not_a_shell_finding(self):
+        """SHELL_UNRESOLVED is read by --json consumers; its meaning stays as it was."""
+        text = self.two_steps("Working directory: `elsewhere`")
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertNotIn("SHELL_UNRESOLVED", {f.code for f in findings})
+
+    def test_a_working_directory_inside_a_step_stops_every_command(self):
+        """D1 = A: ignored, it would run the step from a directory its author did not mean."""
+        text = self.two_steps("Working directory: `elsewhere`")
+        findings = check(parse(text), base_dir=REPO_ROOT, execute=True)
+        self.assertFalse(
+            os.path.exists(self.MARKER), "a command ran despite a misplaced Working directory:"
+        )
+        self.assertIn("no command in this document was executed", findings[0].detail)
+
+    def test_an_elements_line_inside_a_step_does_not_stop_commands(self):
+        check(parse(self.two_steps("Elements:")), base_dir=REPO_ROOT, execute=True)
+        self.assertTrue(os.path.exists(self.MARKER), "the control command never ran")
 
 
 if __name__ == "__main__":

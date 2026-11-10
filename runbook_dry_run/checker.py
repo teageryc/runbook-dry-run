@@ -76,6 +76,10 @@ FINDING_CODES = {
         "a line the parser would read sits inside fenced code, so it was not read"
     ),
     "FENCE_UNCLOSED": "a code fence never closes, so nothing after it was checked",
+    "DOCUMENT_LINE_IN_STEP": (
+        "a Working directory: or Elements: line sits inside a step, where it is not read; "
+        "a misplaced Working directory: also stops every command in the document"
+    ),
 }
 
 
@@ -132,6 +136,7 @@ class Step:
     # inserted above shifts every positional argument written against 0.3.
     fenced_lines: list[SourceLine] = field(default_factory=list)
     unclosed_fence: SourceLine | None = None
+    misplaced_lines: list[SourceLine] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -286,6 +291,12 @@ def parse(text: str) -> Runbook:
             # Recorded so check() can refuse it out loud: dropped silently, it would
             # leave a bash runbook running in the platform default.
             book.shell_in_steps.append(current.number)
+            continue
+
+        if WORKING_DIRECTORY.match(line) or ELEMENTS_HEADING.match(line):
+            # Recorded so check() can refuse it: dropped silently, a step's paths
+            # resolved from a directory its author did not mean (decision C2).
+            current.misplaced_lines.append(SourceLine(number, line))
             continue
 
         directive = DIRECTIVE.match(line)
@@ -684,6 +695,26 @@ def _fence_findings(
     return found
 
 
+def _misplaces_directory(book: Runbook) -> bool:
+    """Whether any step holds a Working directory: line, which stops every command (D1)."""
+    return any(
+        WORKING_DIRECTORY.match(line.text) for step in book.steps for line in step.misplaced_lines
+    )
+
+
+def _misplaced_detail(line: SourceLine, base: str) -> str:
+    if WORKING_DIRECTORY.match(line.text):
+        return (
+            f"line {line.number}, Working directory:, belongs before the first step; inside "
+            f"a step it is not read, so this step's paths resolve from {base}, and no "
+            "command in this document was executed"
+        )
+    return (
+        f"line {line.number}, Elements:, belongs before the first step; inside a step it "
+        "is not read, so nothing listed under it is in the inventory"
+    )
+
+
 def check(
     book: Runbook,
     base_dir: str | None = None,
@@ -715,6 +746,9 @@ def check(
     # were not defects (spec section 8).
     launcher = Launcher()
     misplaced_shell = set(book.shell_in_steps)
+    # A misplaced Working directory: stops every command, as a misplaced Shell: does
+    # (spec §9 and §11): ignoring either changes how the commands run.
+    refuse_commands = bool(misplaced_shell) or _misplaces_directory(book)
     shell_problem: str | None = None
     declared_shells = {_shell_of(d) or d.strip().casefold() for d in book.shell_declarations}
     if len(declared_shells) > 1:
@@ -724,7 +758,7 @@ def check(
         if _shell_of(book.shell) is None:
             # A name the tool does not know is a defect in the document, on any machine.
             shell_problem = _unknown_shell(book.shell)
-        elif execute and not misplaced_shell and _has_commands_to_run(book):
+        elif execute and not refuse_commands and _has_commands_to_run(book):
             # Whether the shell exists is a fact about THIS machine, which is not the
             # reader's; it is asked only when a command is about to run here.
             resolved_shell, problem = resolve_shell(book.shell)
@@ -742,7 +776,7 @@ def check(
             )
         )
         execute = False
-    if misplaced_shell:
+    if refuse_commands:
         execute = False
 
     base = base_dir or (declared if declared else os.getcwd())
@@ -765,6 +799,15 @@ def check(
         findings.extend(
             _fence_findings(step.number, step.title, step.fenced_lines, step.unclosed_fence)
         )
+        for misplaced in step.misplaced_lines:
+            findings.append(
+                Finding(
+                    step.number,
+                    step.title,
+                    "DOCUMENT_LINE_IN_STEP",
+                    _misplaced_detail(misplaced, base),
+                )
+            )
 
         if not step.failure_branch:
             findings.append(
