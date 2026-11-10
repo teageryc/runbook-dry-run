@@ -38,7 +38,11 @@
 
 **I do not know what a fenced code block is.** *(Added 2026-11-03, v0.3.)* A line inside a fenced code block is read like any other line. A `Run:` line shown there as an example is a command, and `--execute` runs it; a `Shell:` line shown there inside a step refuses the whole document. A line that starts with a space is never read as a directive, so indent an example, or change its directive word.
 
+> **Corrected 2026-11-10 (v0.4)** — fenced code is now known. A line inside a backtick or tilde fence is not read; each one that would have been is reported as `FENCED_LINE_SKIPPED`, and a fence that never closes is `FENCE_UNCLOSED`, an error. What remains: a directive inside an HTML comment (`<!-- … -->`) is still read, though a rendered page hides it.
+
 **A document-level line written inside a step is ignored.** *(Added 2026-11-03, v0.3.)* `Working directory:` and `Elements:` belong before the first step. Written inside one, they are dropped without a word, and that step's paths still resolve from the document's working directory. Only `Shell:` is refused there, because ignoring it would change the shell every command runs in.
+
+> **Corrected 2026-11-10 (v0.4)** — no longer ignored: inside a step, both are `DOCUMENT_LINE_IN_STEP`, an error, and a misplaced `Working directory:` stops every command in the document.
 
 **A command that changes the console's code page is read in the old one.** *(Added 2026-11-03, v0.3.)* On Windows I read `cmd.exe` and PowerShell output in the console's output code page as it was when the command started. A command that runs `chcp` changes the page its own later output arrives in, and a non-ASCII detail then reads wrongly; the exit code and the finding do not change.
 
@@ -84,7 +88,11 @@
 
 **我不知道什么是围栏代码块。**（2026-11-03 补记，v0.3）围栏代码块里的一行，和别的行一样被读取。作为示例写在那里的 `Run:` 行就是一条命令，`--execute` 会运行它；写在某个步骤里的示例 `Shell:` 行会让整份文档被拒绝。以空格开头的行永远不会被读成指令，所以请把示例缩进，或者改掉它的指令词。
 
+> **2026-11-10 更正（v0.4）** —— 现在认得围栏代码块了。反引号或波浪号围栏里的行不会被读取；其中每一条本会被读取的行都报为 `FENCED_LINE_SKIPPED`，没有关闭的围栏报为 `FENCE_UNCLOSED`，属于错误。仍然存在的局限：HTML 注释（`<!-- … -->`）里的指令依然会被读取，尽管渲染后的页面看不见它。
+
 **写在步骤里的文档级行会被忽略。**（2026-11-03 补记，v0.3）`Working directory:` 和 `Elements:` 应该写在第一步之前。写在某一步里时，它们会被悄无声息地丢掉，那一步的路径仍然从文档的工作目录解析。只有 `Shell:` 写在那里会被拒绝，因为忽略它会改变每一条命令运行所用的 shell。
+
+> **2026-11-10 更正（v0.4）** —— 不再被忽略：写在步骤里时，两者都报为 `DOCUMENT_LINE_IN_STEP`，属于错误；写错位置的 `Working directory:` 还会让文档里的任何命令都不执行。
 
 **改变控制台代码页的命令，会按旧代码页读取。**（2026-11-03 补记，v0.3）在 Windows 上，我按命令启动时控制台的输出代码页读取 `cmd.exe` 和 PowerShell 的输出。一条运行了 `chcp` 的命令会改变它自己后续输出所用的代码页，于是非 ASCII 的细节会读错；退出码和发现不受影响。
 

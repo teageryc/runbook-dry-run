@@ -1,6 +1,6 @@
 # Design — runbook-dry-run | 设计 — 运行手册预演
 
-> **Dated** 2026-09-12 · **Status** accepted · **Supersedes** nothing · **Amended** 2026-09-12 for v0.2, see §7 · 2026-11-03 for v0.3, see §8 and §9
+> **Dated** 2026-09-12 · **Status** accepted · **Supersedes** nothing · **Amended** 2026-09-12 for v0.2, see §7 · 2026-11-03 for v0.3, see §8 and §9 · 2026-11-10 for v0.4, see §11
 > This document is the contract. The code is one implementation of it, and where the two disagree, this file is the defect report.
 
 ---
@@ -76,6 +76,9 @@ A finding is always anchored to a step number. `step 0` means the defect belongs
 | `MANUAL_GATE_UNRESOLVED` | error | an `After manual step:` names no step number, or one the document does not contain, or one that does not precede this step |
 | `COMMAND_DEFERRED_MANUAL_GATE` | info | a step waits on a manual step, so its commands were not executed under `--execute` |
 | `SHELL_UNRESOLVED` | error | on every run: the `Shell:` line names a shell this tool does not know, appears inside a step (reported at that step), or is one of two lines naming different shells; under `--execute`, when a command would run: the named shell is not on this machine. No command in the document is then executed |
+| `FENCED_LINE_SKIPPED` | info | a line the parser would read sits inside fenced code, so it was not read (§11) |
+| `FENCE_UNCLOSED` | error | a code fence never closes; reported at the step where it opened, or at the document (§11) |
+| `DOCUMENT_LINE_IN_STEP` | error | a `Working directory:` or `Elements:` line sits inside a step; a misplaced `Working directory:` also stops every command in the document (§11) |
 
 Exit code is `1` if any finding has severity `error`, otherwise `0`.
 
@@ -165,6 +168,19 @@ A second code review, over the first review's fixes (`6f35c5b..dacaf75`), report
 
 **What stays a limit** (Yan's ruling). The parser does not know fenced code, so a fenced `Run:` example is executed, and a `Working directory:` or `Elements:` line inside a step is ignored. Changing either would change what existing runbooks do, so both are recorded in `LIMITS.md` instead of changed in this release.
 
+> **Corrected 2026-11-10 (§11)** — both are changed in v0.4, and the code-page limit is corrected by measurement.
+
+### 11. Amendment, 2026-11-10 — fenced code, document lines inside a step, and the console's code page
+
+The three limits §10 kept, changed in v0.4 on Yan's picks C1 to C3 (2026-11-05) and D1 and D2 (2026-11-10).
+
+**Fenced code is an example, never an instruction.** A line inside a CommonMark fence (up to three spaces, then three or more backticks or tildes, closed by the same character at least as long) is not read. Each one the parser would otherwise read is reported as `FENCED_LINE_SKIPPED`, informational, at the step it sits in. Before v0.4 a fenced `Run:` example was a command that `--execute` ran, a fenced `## Step N` became a step, and a fenced `Shell:` example inside a step refused the whole document; this repository's own README, checked as a runbook, showed all three. ```` ```x``` ```` on one line is inline code, not a fence.
+
+**A fence that never closes is an error.** A renderer shows everything after it as code, so read that way every later step would vanish from the check without a word. `FENCE_UNCLOSED` is reported at the step where the fence opened, or at the document when it opened before the first step. Commands before it still run.
+
+**Document lines inside a step are refused.** `Working directory:` and `Elements:` belong before the first step; inside one they are `DOCUMENT_LINE_IN_STEP` at that step. `SHELL_UNRESOLVED` keeps its meaning, which `--json` consumers read. A misplaced `Working directory:` also stops every command in the document, as a misplaced `Shell:` does (§9): ignored, it would run that step's commands from a directory its author did not mean. A misplaced `Elements:` moves no command and stops nothing.
+
+**The code page: the planned fix was measured and not built.** The plan was to decode a command's output after it exits, in the page current then. Measured from Git Bash (console 437) and PowerShell (65001): in a one-line command, cmd.exe keeps the page it started with for the rest of the line — `chcp 437 & echo Schlüssel` arrives as UTF-8 from a 65001 start, so decoding after exit would read `Schl├╝ssel` where v0.3 reads it correctly — and a character the starting page cannot hold becomes `?` inside cmd.exe, beyond any decoder. Only a script the command runs writes its later lines in the new page. The bytes do not say which happened, so decoding is unchanged. What was built instead: both of the console's code pages, input and output, are put back when the check ends. A child's `chcp` sets both on the console the checker shares with it, and the change outlived the checker in both shells (437 to 65001, 65001 to 850); `chcp` itself reports the input page, so restoring only the output page would have left the change visible. Inside a run the pages are left alone, as one terminal carries them from step to step.
 
 ---
 
@@ -239,6 +255,9 @@ On failure: <本步骤失败时读者该做什么>
 | `MANUAL_GATE_UNRESOLVED` | error | 某个 `After manual step:` 没有点出步骤编号，或点的步骤文档里没有，或点的步骤不在本步骤之前 |
 | `COMMAND_DEFERRED_MANUAL_GATE` | info | 某个步骤在等一个手工步骤，因而在 `--execute` 下它的命令未被执行 |
 | `SHELL_UNRESOLVED` | error | 每次运行都会报：`Shell:` 行点名的 shell 本工具不认识、写在了某个步骤里（报在那一步），或者是点名不同 shell 的两行之一；在 `--execute` 下且有命令要运行时：点名的 shell 不在这台机器上。此时文档里任何命令都不执行 |
+| `FENCED_LINE_SKIPPED` | info | 本会被解析器读取的一行位于围栏代码块内，因而未被读取（第十一节） |
+| `FENCE_UNCLOSED` | error | 某个代码围栏没有关闭；报在它开启的那一步，或报在文档（第十一节） |
+| `DOCUMENT_LINE_IN_STEP` | error | `Working directory:` 或 `Elements:` 行写在了步骤里；写错位置的 `Working directory:` 还会让文档里的任何命令都不执行（第十一节） |
 
 只要有任何一个发现的严重度是 `error`，退出码为 `1`，否则为 `0`。
 
@@ -327,3 +346,17 @@ v0.3 的一次代码审查是在发布之前、而不是之后做的，报告了
 **`Runbook.shell` 是推导出来的，不是存下来的。** `check()` 用声明列表判断冲突，又用 `shell` 解析 shell，于是调用者可以让两者不一致。现在它是一个只读属性，即第一条声明；趁发布之前公开接口还改得起，就改了。
 
 **仍然是局限的部分**（Yan 的裁决）。解析器不认识围栏代码块，所以围栏里作为示例的 `Run:` 会被执行；写在步骤里的 `Working directory:` 或 `Elements:` 行会被忽略。改动任何一项都会改变现有手册的行为，所以这两项记进 `LIMITS.md`，而不在这个版本里修改。
+
+> **2026-11-10 更正（第十一节）** —— 这两项都在 v0.4 改了，代码页那一项的局限也按实测作了更正。
+
+### 十一、修订，2026-11-10 —— 围栏代码块、写在步骤里的文档级行，以及控制台的代码页
+
+第十节保留的三项局限，在 v0.4 按 Yan 的选择 C1 至 C3（2026-11-05）以及 D1、D2（2026-11-10）作了修改。
+
+**围栏代码块是示例，永远不是指令。** 位于 CommonMark 围栏内的行（最多三个空格，然后是三个或更多反引号或波浪号，由同一种字符、长度不短于开头的围栏关闭）不会被读取。其中每一条本会被解析器读取的行，都在它所在的那一步报为 `FENCED_LINE_SKIPPED`（提示性）。v0.4 之前，围栏里作为示例的 `Run:` 是一条 `--execute` 会运行的命令，围栏里的 `## Step N` 会变成一个步骤，写在某一步里的围栏示例 `Shell:` 会让整份文档被拒绝；本仓库自己的 README 当作手册检查时，三种情况都出现了。写在一行里的 ```` ```x``` ```` 是行内代码，不是围栏。
+
+**没有关闭的围栏是错误。** 渲染器把它之后的一切都显示为代码；照这样读，后面的每一步都会悄无声息地从检查里消失。`FENCE_UNCLOSED` 报在围栏开启的那一步；围栏在第一步之前开启时，报在文档。它之前的命令照常运行。
+
+**写在步骤里的文档级行被拒绝。** `Working directory:` 和 `Elements:` 应该写在第一步之前；写在某一步里时，在那一步报为 `DOCUMENT_LINE_IN_STEP`。`SHELL_UNRESOLVED` 的含义不变，`--json` 的使用者读的就是它。写错位置的 `Working directory:` 还会让文档里的任何命令都不执行，和写错位置的 `Shell:` 一样（第九节）：忽略它，那一步的命令就会在作者并不打算的目录里运行。写错位置的 `Elements:` 不改变任何命令，因此什么也不阻止。
+
+**代码页：原计划的修复经实测后没有做。** 原计划是在命令退出之后，按那时的代码页解码它的输出。在 Git Bash（控制台 437）和 PowerShell（65001）下实测：一行命令在这一行剩下的部分里沿用 cmd.exe 启动时的代码页——从 65001 启动时，`chcp 437 & echo Schlüssel` 以 UTF-8 到达，退出后再解码会读成 `Schl├╝ssel`，而 v0.3 读得正确——启动代码页装不下的字符则在 cmd.exe 里就变成了 `?`，任何解码都救不回来。只有命令所运行的脚本，才会把后面的行按新代码页写出。字节本身看不出是哪种情况，所以解码方式不变。改为做了这件事：检查结束时，把控制台的两个代码页（输入和输出）都改回原样。子进程的 `chcp` 会同时改变它与检查器共用的控制台的这两个代码页，而且这一改变在两种 shell 下都比检查器活得更久（437 变 65001，65001 变 850）；`chcp` 本身报告的是输入代码页，所以只改回输出代码页，改变仍然看得见。在一次运行之内，代码页保持不动，就像同一个终端从一步带到下一步那样。
