@@ -38,7 +38,7 @@
 
 **I do not know what a fenced code block is.** *(Added 2026-11-03, v0.3.)* A line inside a fenced code block is read like any other line. A `Run:` line shown there as an example is a command, and `--execute` runs it; a `Shell:` line shown there inside a step refuses the whole document. A line that starts with a space is never read as a directive, so indent an example, or change its directive word.
 
-> **Corrected 2026-11-10 (v0.4)** — fenced code is now known. A line inside a backtick or tilde fence is not read; each one that would have been is reported as `FENCED_LINE_SKIPPED`, and a fence that never closes is `FENCE_UNCLOSED`, an error, after which I run nothing. What remains: a directive inside an HTML comment (`<!-- … -->`) is still read, though a rendered page hides it. I do not model list items, block quotes or HTML blocks either: a fence a renderer closes where its list item ends stays open for me, so I report `FENCE_UNCLOSED` and run nothing, and the line I name may be far from the mistake.
+> **Corrected 2026-11-10 (v0.4)** — fenced code is now known. A line inside a backtick or tilde fence is not read; each one that would have been is reported as `FENCED_LINE_SKIPPED`. A fence that never closes is `FENCE_UNCLOSED`, and a fence opened two or three spaces in and closed less indented is `FENCE_MISALIGNED`; both are errors, and then no command in the document runs. A fence opened on a list item's marker line is read as CommonMark reads it, and a fence line inside an HTML comment, `<pre>`, `<script>`, `<style>`, `<textarea>`, `<?…?>`, `<!…>` or CDATA block is not a fence. What remains: inside other HTML blocks (`<div>` and the like, up to the next blank line) a fence line is still read as a fence, and that can turn the rest of the document inside out; a top-level fence indented two or three spaces and closed less indented is refused although it is valid Markdown, so align the closer; block quotes and nested lists are not modelled; and a directive inside an HTML comment is still read, though a rendered page hides it.
 
 **A document-level line written inside a step is ignored.** *(Added 2026-11-03, v0.3.)* `Working directory:` and `Elements:` belong before the first step. Written inside one, they are dropped without a word, and that step's paths still resolve from the document's working directory. Only `Shell:` is refused there, because ignoring it would change the shell every command runs in.
 
@@ -47,6 +47,8 @@
 **A command that changes the console's code page is read in the old one.** *(Added 2026-11-03, v0.3.)* On Windows I read `cmd.exe` and PowerShell output in the console's output code page as it was when the command started. A command that runs `chcp` changes the page its own later output arrives in, and a non-ASCII detail then reads wrongly; the exit code and the finding do not change.
 
 > **Corrected 2026-11-10 (v0.4)** — measured, and partly wrong as first written. A one-line command keeps the page cmd.exe started with for the rest of the line, so its output is read correctly, and a character that page cannot hold becomes `?` inside cmd.exe before I see it. Only a script the command runs writes its later lines in the new page, and those I read in the old one, wrongly. The bytes do not say which happened, so I read every command in the page it starts with. Since v0.4 I also put both of the console's code pages, input and output, back when the check ends: a command's `chcp` used to stay in your terminal after I exited.
+
+**A redirected text report escapes what its encoding cannot hold.** *(Added 2026-11-10, v0.4.)* Sent to a file or a pipe, the report is written in your locale's encoding (cp1252 on Windows), and text it cannot hold, such as Chinese, arrives as `\u4e2d\u6587` instead of crashing the report. `--json` carries the same escapes, which a JSON reader turns back into the text; to get the text itself, set `PYTHONIOENCODING=utf-8`.
 
 **It cannot judge a step that requires a human decision.** "Compare the two figures and decide whether to proceed" is checkable only for its failure branch. Whether the reader can actually make that judgement is exactly what a walk-through is for, and that is the thing I most want to be understood as not replacing.
 
@@ -88,7 +90,7 @@
 
 **我不知道什么是围栏代码块。**（2026-11-03 补记，v0.3）围栏代码块里的一行，和别的行一样被读取。作为示例写在那里的 `Run:` 行就是一条命令，`--execute` 会运行它；写在某个步骤里的示例 `Shell:` 行会让整份文档被拒绝。以空格开头的行永远不会被读成指令，所以请把示例缩进，或者改掉它的指令词。
 
-> **2026-11-10 更正（v0.4）** —— 现在认得围栏代码块了。反引号或波浪号围栏里的行不会被读取；其中每一条本会被读取的行都报为 `FENCED_LINE_SKIPPED`，没有关闭的围栏报为 `FENCE_UNCLOSED`，属于错误，此后我什么都不运行。仍然存在的局限：HTML 注释（`<!-- … -->`）里的指令依然会被读取，尽管渲染后的页面看不见它。我也不模拟列表项、引用块和 HTML 块：渲染器在列表项结束处关闭的围栏，对我来说仍然开着，于是我报出 `FENCE_UNCLOSED` 并且什么都不运行，而我点出的那一行可能离真正的错误很远。
+> **2026-11-10 更正（v0.4）** —— 现在认得围栏代码块了。反引号或波浪号围栏里的行不会被读取；其中每一条本会被读取的行都报为 `FENCED_LINE_SKIPPED`。没有关闭的围栏报为 `FENCE_UNCLOSED`，以两到三个空格缩进开启、却以更少缩进关闭的围栏报为 `FENCE_MISALIGNED`；两者都是错误，此时文档里任何命令都不运行。在列表项标记那一行开启的围栏，按 CommonMark 的读法读；HTML 注释、`<pre>`、`<script>`、`<style>`、`<textarea>`、`<?…?>`、`<!…>` 或 CDATA 块里的围栏行不是围栏。仍然存在的局限：在其他种类的 HTML 块里（`<div>` 之类，直到下一个空行），围栏行仍被当作围栏读取，这可能把文档其余部分整个读反；以两到三个空格缩进、又以更少缩进关闭的顶层围栏，虽然是合法的 Markdown，也会被拒绝，所以请把结束围栏对齐；引用块和嵌套列表不在模拟范围内；HTML 注释里的指令依然会被读取，尽管渲染后的页面看不见它。
 
 **写在步骤里的文档级行会被忽略。**（2026-11-03 补记，v0.3）`Working directory:` 和 `Elements:` 应该写在第一步之前。写在某一步里时，它们会被悄无声息地丢掉，那一步的路径仍然从文档的工作目录解析。只有 `Shell:` 写在那里会被拒绝，因为忽略它会改变每一条命令运行所用的 shell。
 
@@ -97,5 +99,7 @@
 **改变控制台代码页的命令，会按旧代码页读取。**（2026-11-03 补记，v0.3）在 Windows 上，我按命令启动时控制台的输出代码页读取 `cmd.exe` 和 PowerShell 的输出。一条运行了 `chcp` 的命令会改变它自己后续输出所用的代码页，于是非 ASCII 的细节会读错；退出码和发现不受影响。
 
 > **2026-11-10 更正（v0.4）** —— 经过实测，原先的写法部分不对。一行命令在这一行剩下的部分里，沿用 cmd.exe 启动时的代码页，所以它的输出读得正确；那个代码页装不下的字符，在我看到之前就已经在 cmd.exe 里变成了 `?`。只有命令所运行的脚本，才会把后面的行按新代码页写出，而这些行我按旧代码页读，读错了。从字节上看不出是哪一种，所以我按每条命令启动时的代码页读它。从 v0.4 起，检查结束时我还会把控制台的两个代码页（输入和输出）都改回原样：以前，命令里的 `chcp` 会在我退出后仍然留在你的终端里。
+
+**重定向的文本报告会把编码装不下的字符转义。**（2026-11-10 补记，v0.4）把报告输出到文件或管道时，它按你所在区域的编码写出（Windows 上是 cp1252），装不下的文字（例如中文）会以 `\u4e2d\u6587` 的形式出现，而不会让报告崩溃。`--json` 里也是同样的转义，JSON 读取器会把它还原成原文；若要直接得到原文，请设置 `PYTHONIOENCODING=utf-8`。
 
 **它无法判断需要人做决定的步骤。**「比较两个数字并决定是否继续」——我只能检查它的失败分支。读者是否真的做得出那个判断，恰恰是走一遍流程要回答的问题，而这正是我最希望被理解为"本工具不替代"的那件事。
