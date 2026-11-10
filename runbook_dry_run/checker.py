@@ -39,8 +39,22 @@ BACKTICKED = re.compile(r"`([^`]+)`")
 # ```x``` on one line is inline code, not a fence that runs to the end.
 FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 FENCE_CLOSE = re.compile(r"^ {0,3}(`{3,}|~{3,})$")
-# CommonMark's line endings, and nothing else: str.splitlines() also splits on
-# U+2028, U+0085 and form feed, which shifted every reported line number after one.
+# A fence opened on a list item's marker line ("- ```", "1. ~~~"): the item's lines
+# are read relative to the marker's width, as CommonMark reads them.
+LIST_FENCE_OPEN = re.compile(r"^( {0,3}(?:[-*+]|\d{1,9}[.)]) {1,4})(`{3,}|~{3,})(.*)$")
+# CommonMark HTML blocks of types 1 to 5, as (start, end) pairs: inside one, a fence
+# line is not a fence. The end may come on the start line, closing it there.
+HTML_BLOCKS = [
+    (re.compile(r"^ {0,3}<(?:pre|script|style|textarea)(?:[ \t>]|$)", re.I),
+     re.compile(r"</(?:pre|script|style|textarea)>", re.I)),
+    (re.compile(r"^ {0,3}<!--"), re.compile(r"-->")),
+    (re.compile(r"^ {0,3}<\?"), re.compile(r"\?>")),
+    (re.compile(r"^ {0,3}<![A-Za-z]"), re.compile(r">")),
+    (re.compile(r"^ {0,3}<!\[CDATA\["), re.compile(r"\]\]>")),
+]
+# CommonMark's line endings: line numbers count these and nothing else. A line is
+# still read in the parts str.splitlines() makes of it (form feed, U+2028), as in
+# v0.3, so a page break before a heading does not hide the step.
 LINE_ENDING = re.compile(r"\r\n|\r|\n")
 
 # `Shell:` names as a reader writes them (matched case-insensitively), mapped to
@@ -81,6 +95,11 @@ FINDING_CODES = {
     "FENCE_UNCLOSED": (
         "a code fence never closes, so nothing after it was checked and no command in "
         "the document is executed"
+    ),
+    "FENCE_MISALIGNED": (
+        "a code fence is closed by a line indented less than its opener, which in a list "
+        "item would open a new fence instead, so which lines are code is not known and "
+        "no command in the document is executed"
     ),
     "DOCUMENT_LINE_IN_STEP": (
         "a Working directory: or Elements: line sits inside a step, where it is not read; "
@@ -143,6 +162,7 @@ class Step:
     fenced_lines: list[SourceLine] = field(default_factory=list)
     unclosed_fence: SourceLine | None = None
     misplaced_lines: list[SourceLine] = field(default_factory=list)
+    misaligned_fences: list[tuple[SourceLine, SourceLine]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -177,6 +197,7 @@ class Runbook:
     shell_in_steps: list[int] = field(default_factory=list)
     fenced_lines: list[SourceLine] = field(default_factory=list)
     unclosed_fence: SourceLine | None = None
+    misaligned_fences: list[tuple[SourceLine, SourceLine]] = field(default_factory=list)
 
     @property
     def shell(self) -> str | None:
@@ -227,6 +248,29 @@ def _would_be_read(line: str) -> bool:
     return any(shape.match(line) for shape in _READ_LINES)
 
 
+def _opens_list_fence(line: str) -> tuple[str, int] | None:
+    """(fence, the item's content column) for a fence on a list-marker line, or None."""
+    match = LIST_FENCE_OPEN.match(line)
+    if not match:
+        return None
+    fence, info = match.group(2), match.group(3)
+    if fence[0] == "`" and "`" in info:
+        return None
+    return fence, len(match.group(1))
+
+
+def _html_block(line: str) -> re.Pattern | None:
+    """The end condition of the HTML block this line opens and leaves open, or None."""
+    for start, end in HTML_BLOCKS:
+        if start.match(line):
+            return None if end.search(line) else end
+    return None
+
+
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
 def parse(text: str) -> Runbook:
     """Read a runbook into steps. Never raises on malformed input.
 
@@ -242,100 +286,133 @@ def parse(text: str) -> Runbook:
     in_elements = False
     fence: str | None = None
     fence_opened: SourceLine | None = None
+    fence_indent = 0  # the opener's column; a list item's lines are read from it
+    list_fence = False
+    html_end: re.Pattern | None = None
 
-    for number, raw in enumerate(LINE_ENDING.split(text), start=1):
-        line = raw.rstrip()
-        # Only spaces and tabs may follow a closing fence (CommonMark): a fence line
-        # ending in a non-breaking space, as Word pastes it, does not close one.
-        fence_line = raw.rstrip(" \t")
+    for number, physical in enumerate(LINE_ENDING.split(text), start=1):
+        # Fences are found on the line as CommonMark sees it. Only spaces and tabs
+        # may follow a closing fence: a fence line ending in a non-breaking space, as
+        # Word pastes it, does not close one.
+        line = physical.rstrip()
+        fence_line = physical.rstrip(" \t")
+        owner = current if current is not None else book
+
+        if list_fence and fence is not None and fence_line.strip() and (
+            _indent(fence_line) < fence_indent
+        ):
+            # A line indented less than the list item ends the item and the fence in
+            # it (CommonMark); the line itself is read below like any other.
+            fence = None
 
         if fence is not None:
-            if _closes_fence(fence_line, fence):
+            inner = fence_line[fence_indent:] if list_fence else fence_line
+            if _closes_fence(inner, fence):
+                if not list_fence and fence_indent >= 2 and _indent(fence_line) < fence_indent:
+                    # In a list item, this line would end the item and open a new
+                    # fence. Lists are not modelled here, so which lines are code is
+                    # not known: check() refuses to run anything (FENCE_MISALIGNED).
+                    owner.misaligned_fences.append((fence_opened, SourceLine(number, line)))
                 fence = None
             elif _would_be_read(line):
-                owner = current.fenced_lines if current is not None else book.fenced_lines
-                owner.append(SourceLine(number, line))
+                owner.fenced_lines.append(SourceLine(number, line))
             continue
 
-        opened = _opens_fence(fence_line)
-        if opened is not None:
-            fence, fence_opened = opened, SourceLine(number, line)
-            in_elements = False
-            continue
-
-        heading = STEP_HEADING.match(line)
-        if heading:
-            in_elements = False
-            current = Step(number=int(heading.group(1)), title=heading.group(2))
-            book.steps.append(current)
-            continue
-
-        if current is None:
-            if line.startswith("# ") and not book.title:
-                book.title = line[2:].strip()
-                continue
-            wd = WORKING_DIRECTORY.match(line)
-            if wd:
-                book.working_directory = _first_backticked(wd.group(1))
-                in_elements = False
-                continue
-            shell = SHELL_LINE.match(line)
-            if shell:
-                declared = _first_backticked(shell.group(1))
-                book.shell_declarations.append(declared)
-                in_elements = False
-                continue
-            if ELEMENTS_HEADING.match(line):
-                in_elements = True
-                continue
-            if in_elements:
-                bullet = BULLET.match(line)
-                if bullet:
-                    book.element_inventory.append(_first_backticked(bullet.group(1)))
-                elif line.strip():
-                    in_elements = False
-            continue
-
-        if SHELL_LINE.match(line):
-            # Recorded so check() can refuse it out loud: dropped silently, it would
-            # leave a bash runbook running in the platform default.
-            book.shell_in_steps.append(current.number)
-            continue
-
-        if WORKING_DIRECTORY.match(line) or ELEMENTS_HEADING.match(line):
-            # Recorded so check() can refuse it: dropped silently, a step's paths
-            # resolved from a directory its author did not mean (decision C2).
-            current.misplaced_lines.append(SourceLine(number, line))
-            continue
-
-        directive = DIRECTIVE.match(line)
-        if not directive:
-            continue
-        key, value = directive.group(1), directive.group(2)
-        if key == "Run":
-            current.commands.append(_first_backticked(value))
-        elif key == "Run (destructive)":
-            current.destructive_commands.append(_first_backticked(value))
-        elif key == "Path":
-            current.paths.extend(_all_backticked(value))
-        elif key in ("Open", "Click"):
-            current.elements.extend(_all_backticked(value))
-        elif key == "On failure":
-            current.failure_branch = value.strip()
-        elif key == "After manual step":
-            current.manual_gate_declared = True
-            reference = STEP_REFERENCE.search(value)
-            current.manual_gate = int(reference.group(1)) if reference else None
+        if html_end is not None:
+            # Inside an HTML block a fence line is not a fence (CommonMark types 1-5).
+            if html_end.search(line):
+                html_end = None
         else:
-            expect_fail = EXPECT_FAIL_KEY.match(key)
-            if expect_fail:
-                declared = expect_fail.group(1)
-                current.expect_fail_commands.append(
-                    ExpectedFailure(
-                        _first_backticked(value),
-                        int(declared) if declared is not None else None,
+            html_end = _html_block(fence_line)
+            opened = _opens_fence(fence_line)
+            listed = _opens_list_fence(fence_line) if opened is None else None
+            if opened is not None or listed is not None:
+                if opened is not None:
+                    fence, fence_indent, list_fence = opened, _indent(fence_line), False
+                else:
+                    (fence, fence_indent), list_fence = listed, True
+                fence_opened = SourceLine(number, line)
+                in_elements = False
+                continue
+
+        # The line is read in the parts str.splitlines() makes of it (form feed,
+        # U+2028), as in v0.3, so a page break before a heading does not hide a step.
+        for part in physical.splitlines() or [physical]:
+            line = part.rstrip()
+
+            heading = STEP_HEADING.match(line)
+            if heading:
+                in_elements = False
+                current = Step(number=int(heading.group(1)), title=heading.group(2))
+                book.steps.append(current)
+                continue
+
+            if current is None:
+                if line.startswith("# ") and not book.title:
+                    book.title = line[2:].strip()
+                    continue
+                wd = WORKING_DIRECTORY.match(line)
+                if wd:
+                    book.working_directory = _first_backticked(wd.group(1))
+                    in_elements = False
+                    continue
+                shell = SHELL_LINE.match(line)
+                if shell:
+                    declared = _first_backticked(shell.group(1))
+                    book.shell_declarations.append(declared)
+                    in_elements = False
+                    continue
+                if ELEMENTS_HEADING.match(line):
+                    in_elements = True
+                    continue
+                if in_elements:
+                    bullet = BULLET.match(line)
+                    if bullet:
+                        book.element_inventory.append(_first_backticked(bullet.group(1)))
+                    elif line.strip():
+                        in_elements = False
+                continue
+
+            if SHELL_LINE.match(line):
+                # Recorded so check() can refuse it out loud: dropped silently, it would
+                # leave a bash runbook running in the platform default.
+                book.shell_in_steps.append(current.number)
+                continue
+
+            if WORKING_DIRECTORY.match(line) or ELEMENTS_HEADING.match(line):
+                # Recorded so check() can refuse it: dropped silently, a step's paths
+                # resolved from a directory its author did not mean (decision C2).
+                current.misplaced_lines.append(SourceLine(number, line))
+                continue
+
+            directive = DIRECTIVE.match(line)
+            if not directive:
+                continue
+            key, value = directive.group(1), directive.group(2)
+            if key == "Run":
+                current.commands.append(_first_backticked(value))
+            elif key == "Run (destructive)":
+                current.destructive_commands.append(_first_backticked(value))
+            elif key == "Path":
+                current.paths.extend(_all_backticked(value))
+            elif key in ("Open", "Click"):
+                current.elements.extend(_all_backticked(value))
+            elif key == "On failure":
+                current.failure_branch = value.strip()
+            elif key == "After manual step":
+                current.manual_gate_declared = True
+                reference = STEP_REFERENCE.search(value)
+                current.manual_gate = int(reference.group(1)) if reference else None
+            else:
+                expect_fail = EXPECT_FAIL_KEY.match(key)
+                if expect_fail:
+                    declared = expect_fail.group(1)
+                    current.expect_fail_commands.append(
+                        ExpectedFailure(
+                            _first_backticked(value),
+                            int(declared) if declared is not None else None,
+                        )
                     )
-                )
 
     if fence is not None:
         # An unclosed fence runs to the end, as a renderer shows it. Headings inside
@@ -707,10 +784,28 @@ def _gate_defect(step: Step, step_numbers: set[int]) -> Finding | None:
 
 
 def _fence_findings(
-    number: int, title: str, fenced: list[SourceLine], unclosed: SourceLine | None
+    number: int,
+    title: str,
+    fenced: list[SourceLine],
+    unclosed: SourceLine | None,
+    misaligned: list[tuple[SourceLine, SourceLine]],
 ) -> list[Finding]:
-    """What fenced code hid: an unclosed fence (error), then each skipped line (info)."""
+    """What fenced code hid: misaligned and unclosed fences (errors), then skipped lines."""
     found = []
+    for opened, closed in misaligned:
+        found.append(
+            Finding(
+                number,
+                title,
+                "FENCE_MISALIGNED",
+                f"the code fence opened at line {opened.number}, indented "
+                f"{len(opened.text) - len(opened.text.lstrip(' '))} spaces, is closed at "
+                f"line {closed.number}, indented less; in a list item that line would end "
+                "the item and open a new fence, so which lines are code is not known, and "
+                "no command in this document was executed. Indent the closing fence like "
+                "its opener",
+            )
+        )
     if unclosed is not None:
         found.append(
             Finding(
@@ -746,6 +841,15 @@ def _has_unclosed_fence(book: Runbook) -> bool:
     return book.unclosed_fence is not None or any(
         step.unclosed_fence is not None for step in book.steps
     )
+
+
+def _has_misaligned_fence(book: Runbook) -> bool:
+    """Whether a fence closes on a line indented less than its opener (second review).
+
+    Inside a list item that line would end the item and open a new fence, so the
+    document may read inverted with every fence closed: the even case D3 missed.
+    """
+    return bool(book.misaligned_fences) or any(step.misaligned_fences for step in book.steps)
 
 
 def _misplaces_directory(book: Runbook) -> bool:
@@ -792,7 +896,9 @@ def _check(
 
     if not book.steps:
         findings.append(Finding(0, "", "NO_STEPS", "the document declares no steps"))
-        findings.extend(_fence_findings(0, "", book.fenced_lines, book.unclosed_fence))
+        findings.extend(
+            _fence_findings(0, "", book.fenced_lines, book.unclosed_fence, book.misaligned_fences)
+        )
         return findings
 
     declared = book.working_directory
@@ -805,7 +911,9 @@ def _check(
                 "no 'Working directory:' line, so no path in this document can be resolved",
             )
         )
-    findings.extend(_fence_findings(0, "", book.fenced_lines, book.unclosed_fence))
+    findings.extend(
+        _fence_findings(0, "", book.fenced_lines, book.unclosed_fence, book.misaligned_fences)
+    )
 
     # Every SHELL_UNRESOLVED stops all execution: falling back to the platform
     # default is the behaviour that produced three COMMAND_FAILED findings that
@@ -814,9 +922,13 @@ def _check(
     misplaced_shell = set(book.shell_in_steps)
     # A misplaced Working directory: stops every command, as a misplaced Shell: does
     # (spec §9 and §11): ignoring either changes how the commands run. So does a
-    # fence that never closes: which lines are examples is then no longer known.
+    # fence that never closes, or one closed less indented than it opened: which
+    # lines are examples is then no longer known.
     refuse_commands = (
-        bool(misplaced_shell) or _misplaces_directory(book) or _has_unclosed_fence(book)
+        bool(misplaced_shell)
+        or _misplaces_directory(book)
+        or _has_unclosed_fence(book)
+        or _has_misaligned_fence(book)
     )
     shell_problem: str | None = None
     declared_shells = {_shell_of(d) or d.strip().casefold() for d in book.shell_declarations}
@@ -866,7 +978,13 @@ def _check(
                 )
             )
         findings.extend(
-            _fence_findings(step.number, step.title, step.fenced_lines, step.unclosed_fence)
+            _fence_findings(
+                step.number,
+                step.title,
+                step.fenced_lines,
+                step.unclosed_fence,
+                step.misaligned_fences,
+            )
         )
         for misplaced in step.misplaced_lines:
             findings.append(

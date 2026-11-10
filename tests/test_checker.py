@@ -816,6 +816,23 @@ class FencedCode(unittest.TestCase):
         book = parse(fenced_doc("text more", FENCE, "Run: `x`", FENCE))
         self.assertEqual([(8, "Run: `x`")], book.steps[0].fenced_lines)
 
+    def test_a_fence_after_a_line_separator_is_not_a_fence(self):
+        """CommonMark sees one line, so no fence opens mid-line (review round 1, probe p6)."""
+        book = parse(fenced_doc("text ```", "Run: `a`"))
+        self.assertEqual(["a"], book.steps[0].commands)
+        self.assertIsNone(book.steps[0].unclosed_fence)
+
+    def test_a_form_feed_before_a_heading_still_starts_a_step(self):
+        """As in v0.3 (second review, finding 7): a page break must not hide a step."""
+        text = (
+            "# Runbook: x\n\nWorking directory: `.`\n\n## Step 1 - one\nOn failure: stop.\n"
+            "\f## Step 2 - two\nRun: `echo two`\nOn failure: retry.\n"
+        )
+        book = parse(text)
+        self.assertEqual([1, 2], [step.number for step in book.steps])
+        self.assertEqual(["echo two"], book.steps[1].commands)
+        self.assertEqual("stop.", book.steps[0].failure_branch)
+
     def test_crlf_and_cr_line_endings_still_split_lines(self):
         text = fenced_doc(FENCE, "Run: `a`", FENCE, "Run: `b`")
         for ending in ("\r\n", "\r"):
@@ -996,6 +1013,110 @@ class UnclosedFenceStopsCommands(unittest.TestCase):
         self.assertFalse(os.path.exists(self.MARKERS[1]), "a fenced example was executed")
         self.assertFalse(os.path.exists(self.MARKERS[0]), "a command ran despite an unclosed fence")
         self.assertIn("FENCE_UNCLOSED", codes_at(findings, 1))
+
+
+class FencesInsideContainers(unittest.TestCase):
+    """Second review, Yan's pick A: fences in list items and HTML blocks.
+
+    A fence opened on a list-marker line is read as CommonMark reads it; a fence
+    line inside an HTML block of types 1-5 is not a fence; a fence closed by a line
+    indented less than its opener is FENCE_MISALIGNED, which stops every command.
+    The four documents below are the second review's reproductions (e1, e2, e3, f1).
+    """
+
+    MARKERS = [os.path.join(REPO_ROOT, name)
+               for name in ("container-real-marker.tmp", "container-example-marker.tmp")]
+    REAL = "Run: `python -c \"open('container-real-marker.tmp', 'w').close()\"`"
+    EXAMPLE = "Run: `python -c \"open('container-example-marker.tmp', 'w').close()\"`"
+    HEAD = "# Runbook: x\n\nWorking directory: `.`\n\n"
+
+    def setUp(self):
+        for marker in self.MARKERS:
+            if os.path.exists(marker):
+                os.remove(marker)
+
+    tearDown = setUp
+
+    def run_it(self, text):
+        return check(parse(text), base_dir=REPO_ROOT, execute=True)
+
+    def test_e1_a_list_fence_left_open_then_an_open_example_runs_nothing(self):
+        findings = self.run_it(
+            self.HEAD + "## Step 1 - inspect\n1. The output looks like this:\n   ```\n"
+            "   all good\n2. That is all there is to see.\n\nOn failure: stop.\n\n"
+            f"## Step 2 - the real command\n{self.REAL}\nOn failure: stop.\n\n"
+            f"An example, never run:\n\n```\n{self.EXAMPLE}\nOn failure: stop.\n"
+        )
+        self.assertFalse(os.path.exists(self.MARKERS[1]), "a fenced example was executed")
+        self.assertFalse(os.path.exists(self.MARKERS[0]), "a command ran despite FENCE_MISALIGNED")
+        self.assertIn("FENCE_MISALIGNED", codes_at(findings, 1))
+
+    def test_e2_a_list_fence_closed_at_column_0_runs_nothing(self):
+        findings = self.run_it(
+            self.HEAD + "## Step 1 - inspect\nOn failure: stop.\n\n"
+            "1. The output looks like this:\n   ```\n   all good\n```\n\n"
+            f"## Step 2 - shown as code\n{self.REAL}\nOn failure: stop.\n"
+        )
+        self.assertFalse(os.path.exists(self.MARKERS[0]), "a line shown as code was executed")
+        self.assertIn("FENCE_MISALIGNED", codes_at(findings, 1))
+        self.assertIn("no command in this document was executed", findings[0].detail)
+
+    def test_e3_a_fence_line_inside_an_html_comment_is_not_a_fence(self):
+        findings = self.run_it(
+            self.HEAD + "## Step 1 - the real command\n<!-- the old example:\n```\n-->\n"
+            f"{self.REAL}\nOn failure: stop.\n\nAn example, never run:\n\n```\n{self.EXAMPLE}\n```\n"
+        )
+        self.assertTrue(os.path.exists(self.MARKERS[0]), "the real command never ran")
+        self.assertFalse(os.path.exists(self.MARKERS[1]), "a fenced example was executed")
+        self.assertEqual({"FENCED_LINE_SKIPPED"}, codes_at(findings, 1))
+
+    def test_e3_with_the_example_left_open_runs_nothing(self):
+        findings = self.run_it(
+            self.HEAD + "## Step 1 - the real command\n<!-- the old example:\n```\n-->\n"
+            f"{self.REAL}\nOn failure: stop.\n\nAn example, never run:\n\n```\n{self.EXAMPLE}\n"
+        )
+        self.assertFalse(os.path.exists(self.MARKERS[1]), "a fenced example was executed")
+        self.assertIn("FENCE_UNCLOSED", codes_at(findings, 1))
+
+    def test_f1_a_fence_opened_on_a_list_marker_line_is_a_fence(self):
+        findings = self.run_it(
+            self.HEAD + f"## Step 1 - the real command\n{self.REAL}\nOn failure: stop.\n\n"
+            "The output looks like this:\n\n- ```\n  all good\n  ```\n"
+        )
+        self.assertEqual([], findings, msg=f"unexpected findings: {findings}")
+        self.assertTrue(os.path.exists(self.MARKERS[0]), "the real command never ran")
+
+    def test_an_ordered_list_fence_closes_inside_its_item(self):
+        book = parse(fenced_doc("1. ~~~", "   shown", "   ~~~", "Run: `echo real`"))
+        self.assertEqual(["echo real"], book.steps[0].commands)
+        self.assertIsNone(book.steps[0].unclosed_fence)
+
+    def test_a_list_fence_ends_with_its_item(self):
+        """A line indented less than the item ends the item, and its fence (CommonMark)."""
+        book = parse(fenced_doc("- ```", "  shown", "Run: `echo after`", FENCE, "Run: `x`", FENCE))
+        self.assertEqual(["echo after"], book.steps[0].commands)
+        self.assertEqual([10], [line.number for line in book.steps[0].fenced_lines])
+
+    def test_a_fence_closed_less_indented_than_its_opener_is_misaligned(self):
+        """The cost of the rule: valid at top level, refused because it could be list content."""
+        findings = check(parse(fenced_doc("  ```", "code", FENCE, "Run: `x`")), base_dir=REPO_ROOT)
+        self.assertIn("FENCE_MISALIGNED", codes_at(findings, 1))
+        self.assertTrue(has_errors(findings))
+
+    def test_an_aligned_or_one_space_fence_is_not_misaligned(self):
+        for opener, closer in (("  ```", "  ```"), (" ```", FENCE), ("   ~~~", "   ~~~")):
+            findings = check(parse(fenced_doc(opener, "code", closer, "Run: `x`")), base_dir=REPO_ROOT)
+            self.assertEqual(set(), codes_at(findings, 1), msg=repr((opener, closer)))
+
+    def test_a_one_line_html_comment_opens_no_block(self):
+        book = parse(fenced_doc("<!-- note -->", FENCE, "Run: `a`", FENCE, "Run: `b`"))
+        self.assertEqual(["b"], book.steps[0].commands)
+        self.assertEqual([8], [line.number for line in book.steps[0].fenced_lines])
+
+    def test_a_fence_line_inside_a_pre_block_is_not_a_fence(self):
+        book = parse(fenced_doc("<pre>", FENCE, "</pre>", "Run: `a`"))
+        self.assertEqual(["a"], book.steps[0].commands)
+        self.assertIsNone(book.steps[0].unclosed_fence)
 
 
 class DocumentLinesInsideAStep(unittest.TestCase):
