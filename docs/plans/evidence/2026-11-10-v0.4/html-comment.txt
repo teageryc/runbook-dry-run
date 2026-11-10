@@ -1,0 +1,2 @@
+directive inside an HTML comment, commands read: ['echo hidden']
+control, indented directive, commands read: []

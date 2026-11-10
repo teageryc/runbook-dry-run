@@ -1,0 +1,14 @@
+start output code page: 65001
+one line, chcp 65001 then echo CJK:
+  bytes cmd.exe wrote: b'\xe4\xb8\xad\xe6\x96\x87'
+  reported now (page at start, 65001): '\u4e2d\u6587'
+  decoded after exit (page then, 65001): '\u4e2d\u6587'
+one line, chcp 437 then echo u-umlaut:
+  bytes cmd.exe wrote: b'Schl\xc3\xbcssel'
+  reported now (page at start, 65001): 'Schl\xfcssel'
+  decoded after exit (page then, 437): 'Schl\u251c\u255dssel'
+batch file, chcp 65001 then echo CJK:
+  bytes cmd.exe wrote: b'\xe4\xb8\xad\xe6\x96\x87'
+  reported now (page at start, 65001): '\u4e2d\u6587'
+  decoded after exit (page then, 65001): '\u4e2d\u6587'
+restored output code page: 65001

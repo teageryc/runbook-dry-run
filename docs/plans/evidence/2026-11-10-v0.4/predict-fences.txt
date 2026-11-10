@@ -1,0 +1,68 @@
+Publish-runbook-dry-run-Procedure-2026-09-12.md: 6 fences; unclosed at line -; 0 fenced lines the parser reads today
+Release-runbook-dry-run-Procedure-2026-11-05.md: 17 fences; unclosed at line -; 0 fenced lines the parser reads today
+README.md: 12 fences; unclosed at line -; 38 fenced lines the parser reads today
+  33: Working directory: `/srv/ledger`
+  35: Elements:
+  39: ## Step 1 — Freeze the baseline
+  40: Run: `./bin/freeze --dry-run`
+  41: Path: `config/period.yml`
+  42: On failure: stop and call the controller. Do not proceed to step 2.
+  44: ## Step 2 — Approve the variance
+  45: Open: `Variance report`
+  46: Click: `Approve`
+  47: On failure: you are not an approver. Ask for the role; do not work around it.
+  55: ## Step 3 — Confirm the target repository does not exist yet
+  56: Run (expect-fail: 128): `git ls-remote https://github.com/you/thing.git`
+  57: On failure: exit 0 means it already exists. Stop and read it before pushing into it.
+  59: ## Step 5 — Verify the push landed
+  60: After manual step: 4
+  61: Run: `git ls-remote --heads origin refs/heads/main`
+  62: On failure: nothing reached the remote. Re-read step 4's output.
+  72: Working directory: `/srv/ledger`
+  73: Shell: `Git Bash`
+  136: Working directory: `/srv/ledger`
+  138: Elements:
+  142: ## Step 1 — Freeze the baseline
+  143: Run: `./bin/freeze --dry-run`
+  144: Path: `config/period.yml`
+  145: On failure: stop and call the controller. Do not proceed to step 2.
+  147: ## Step 2 — Approve the variance
+  148: Open: `Variance report`
+  149: Click: `Approve`
+  150: On failure: you are not an approver. Ask for the role; do not work around it.
+  158: ## Step 3 — Confirm the target repository does not exist yet
+  159: Run (expect-fail: 128): `git ls-remote https://github.com/you/thing.git`
+  160: On failure: exit 0 means it already exists. Stop and read it before pushing into it.
+  162: ## Step 5 — Verify the push landed
+  163: After manual step: 4
+  164: Run: `git ls-remote --heads origin refs/heads/main`
+  165: On failure: nothing reached the remote. Re-read step 4's output.
+  175: Working directory: `/srv/ledger`
+  176: Shell: `Git Bash`
+2026-09-12-runbook-dry-run-design.md: 2 fences; unclosed at line -; 26 fenced lines the parser reads today
+  36: Working directory: `<path the reader is told to stand in>`
+  37: Shell: `<bash | Git Bash | pwsh | powershell | cmd>`
+  39: Elements:
+  42: ## Step 1 — <what the reader is doing>
+  43: Run: `<command>`
+  44: Run (destructive): `<command that is reported, never executed>`
+  45: Run (expect-fail): `<command whose success condition is a non-zero exit>`
+  46: Run (expect-fail: 128): `<command that must exit exactly 128, and nothing else>`
+  47: After manual step: <N>
+  48: Path: `<a path this step depends on>`
+  49: Open: `<element>`
+  50: Click: `<element>`
+  51: On failure: <what the reader does when this step fails>
+  199: Working directory: `<读者被告知站在哪个目录>`
+  200: Shell: `<bash | Git Bash | pwsh | powershell | cmd>`
+  202: Elements:
+  205: ## Step 1 — <读者在做什么>
+  206: Run: `<命令>`
+  207: Run (destructive): `<只报告、永不执行的命令>`
+  208: Run (expect-fail): `<成功条件是非零退出码的命令>`
+  209: Run (expect-fail: 128): `<必须恰好退出 128、别的都不算的命令>`
+  210: After manual step: <N>
+  211: Path: `<本步骤依赖的路径>`
+  212: Open: `<元素>`
+  213: Click: `<元素>`
+  214: On failure: <本步骤失败时读者该做什么>

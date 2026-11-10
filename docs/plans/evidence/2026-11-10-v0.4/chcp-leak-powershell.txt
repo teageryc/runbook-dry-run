@@ -1,0 +1,3 @@
+before: Active code page: 65001
+after the Python process exited: Active code page: 850
+restored: Active code page: 65001

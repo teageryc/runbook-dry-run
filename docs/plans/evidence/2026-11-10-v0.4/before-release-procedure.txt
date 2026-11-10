@@ -1,0 +1,6 @@
+G:/Business/AI/Learnings/Release-runbook-dry-run-Procedure-2026-11-05.md: 5 finding(s).
+[info] step 6 (Tag the release and push the tag): COMMAND_SKIPPED_DESTRUCTIVE - marked destructive and not executed: cd /g/Projects/runbook-dry-run && V=$(python -c "import runbook_dry_run as m; print(m.__version__)") && git tag -a "v$V" -m "v$V" && git push origin "v$V"
+[info] step 11 (Switch gh to the owner account): COMMAND_SKIPPED_DESTRUCTIVE - marked destructive and not executed: gh auth switch -h github.com -u teageryc
+[info] step 13 (Create the release as a draft): COMMAND_SKIPPED_DESTRUCTIVE - marked destructive and not executed: cd /g/Projects/runbook-dry-run && V=$(python -c "import runbook_dry_run as m; print(m.__version__)") && gh release create "v$V" --verify-tag --draft --title "v$V" --notes-file "/g/Business/AI/Learnings/runbook-dry-run-release-notes/v$V.md"
+[info] step 15 (Publish): COMMAND_SKIPPED_DESTRUCTIVE - marked destructive and not executed: cd /g/Projects/runbook-dry-run && V=$(python -c "import runbook_dry_run as m; print(m.__version__)") && gh release edit "v$V" --draft=false
+[info] step 17 (Switch gh back to the default account): COMMAND_SKIPPED_DESTRUCTIVE - marked destructive and not executed: gh auth switch -h github.com -u teagerca-prog
