@@ -1,0 +1,1 @@
+documents: 120000 (3 pools x 2 seeds x 20000); skipped, oracle not the spec: 2009; refused: 91371; dangerous and not refused, distinct minimal: 0

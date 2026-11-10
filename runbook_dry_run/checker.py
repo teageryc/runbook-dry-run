@@ -90,16 +90,17 @@ FINDING_CODES = {
         "a shell this machine does not have; no command in the document is executed"
     ),
     "FENCED_LINE_SKIPPED": (
-        "a line the parser would read sits inside fenced code, so it was not read"
+        "a line the parser would read sits inside fenced code or an HTML block, so it was "
+        "not read"
     ),
     "FENCE_UNCLOSED": (
-        "a code fence never closes, so nothing after it was checked and no command in "
-        "the document is executed"
+        "a code fence or HTML block never closes, so nothing after it was checked and no "
+        "command in the document is executed"
     ),
     "FENCE_MISALIGNED": (
-        "a code fence is closed by a line indented less than its opener, which in a list "
-        "item would open a new fence instead, so which lines are code is not known and "
-        "no command in the document is executed"
+        "a code fence or HTML block opened two or three spaces in is followed by a line "
+        "indented less, which in a list item would end it, so which lines are code is not "
+        "known and no command in the document is executed"
     ),
     "DOCUMENT_LINE_IN_STEP": (
         "a Working directory: or Elements: line sits inside a step, where it is not read; "
@@ -289,51 +290,71 @@ def parse(text: str) -> Runbook:
     fence_indent = 0  # the opener's column; a list item's lines are read from it
     list_fence = False
     html_end: re.Pattern | None = None
+    html_opened: SourceLine | None = None
+    html_indent = 0
+    flagged = False  # a misalignment is recorded once per open fence or HTML block
 
     for number, physical in enumerate(LINE_ENDING.split(text), start=1):
-        # Fences are found on the line as CommonMark sees it. Only spaces and tabs
-        # may follow a closing fence: a fence line ending in a non-breaking space, as
-        # Word pastes it, does not close one.
+        # Fences are found on the line as CommonMark sees it: tabs are 4-column stops,
+        # and only spaces and tabs may follow a closing fence, so a fence line ending
+        # in a non-breaking space, as Word pastes it, does not close one.
         line = physical.rstrip()
-        fence_line = physical.rstrip(" \t")
+        fence_line = physical.expandtabs(4).rstrip(" \t")
+        blank = not fence_line.strip(" \t")  # CommonMark's blank: spaces and tabs only
         owner = current if current is not None else book
 
-        if list_fence and fence is not None and fence_line.strip() and (
-            _indent(fence_line) < fence_indent
-        ):
+        if list_fence and fence is not None and not blank and _indent(fence_line) < fence_indent:
             # A line indented less than the list item ends the item and the fence in
             # it (CommonMark); the line itself is read below like any other.
             fence = None
 
+        # A fence or HTML block opened two or three spaces in may sit in a list item
+        # that is not modelled here. A line indented less would end that item and the
+        # block with it, so which lines are code is not known: check() refuses to run
+        # anything (FENCE_MISALIGNED).
+        if not flagged and not blank:
+            if fence is not None and not list_fence and fence_indent >= 2 and (
+                _indent(fence_line) < fence_indent
+            ):
+                owner.misaligned_fences.append((fence_opened, SourceLine(number, line)))
+                flagged = True
+            elif html_end is not None and html_indent >= 2 and _indent(fence_line) < html_indent:
+                owner.misaligned_fences.append((html_opened, SourceLine(number, line)))
+                flagged = True
+
         if fence is not None:
             inner = fence_line[fence_indent:] if list_fence else fence_line
             if _closes_fence(inner, fence):
-                if not list_fence and fence_indent >= 2 and _indent(fence_line) < fence_indent:
-                    # In a list item, this line would end the item and open a new
-                    # fence. Lists are not modelled here, so which lines are code is
-                    # not known: check() refuses to run anything (FENCE_MISALIGNED).
-                    owner.misaligned_fences.append((fence_opened, SourceLine(number, line)))
                 fence = None
             elif _would_be_read(line):
                 owner.fenced_lines.append(SourceLine(number, line))
             continue
 
         if html_end is not None:
-            # Inside an HTML block a fence line is not a fence (CommonMark types 1-5).
+            # Inside an HTML block (CommonMark types 1-5) nothing is read: a fence line
+            # is not a fence, and a command shown in <pre> or hidden in a comment is
+            # not an instruction.
             if html_end.search(line):
                 html_end = None
-        else:
-            html_end = _html_block(fence_line)
-            opened = _opens_fence(fence_line)
-            listed = _opens_list_fence(fence_line) if opened is None else None
-            if opened is not None or listed is not None:
-                if opened is not None:
-                    fence, fence_indent, list_fence = opened, _indent(fence_line), False
-                else:
-                    (fence, fence_indent), list_fence = listed, True
-                fence_opened = SourceLine(number, line)
-                in_elements = False
-                continue
+            if _would_be_read(line):
+                owner.fenced_lines.append(SourceLine(number, line))
+            continue
+
+        html_end = _html_block(fence_line)
+        if html_end is not None:
+            html_opened, html_indent, flagged = SourceLine(number, line), _indent(fence_line), False
+            in_elements = False
+            continue
+        opened = _opens_fence(fence_line)
+        listed = _opens_list_fence(fence_line) if opened is None else None
+        if opened is not None or listed is not None:
+            if opened is not None:
+                fence, fence_indent, list_fence = opened, _indent(fence_line), False
+            else:
+                (fence, fence_indent), list_fence = listed, True
+            fence_opened, flagged = SourceLine(number, line), False
+            in_elements = False
+            continue
 
         # The line is read in the parts str.splitlines() makes of it (form feed,
         # U+2028), as in v0.3, so a page break before a heading does not hide a step.
@@ -414,13 +435,14 @@ def parse(text: str) -> Runbook:
                         )
                     )
 
-    if fence is not None:
-        # An unclosed fence runs to the end, as a renderer shows it. Headings inside
-        # it are skipped, so `current` is still the step where it opened.
+    if fence is not None or html_end is not None:
+        # An unclosed fence or HTML block runs to the end, as a renderer shows it.
+        # Headings inside it are skipped, so `current` is still the step where it opened.
+        opened_at = fence_opened if fence is not None else html_opened
         if current is None:
-            book.unclosed_fence = fence_opened
+            book.unclosed_fence = opened_at
         else:
-            current.unclosed_fence = fence_opened
+            current.unclosed_fence = opened_at
 
     return book
 
@@ -790,31 +812,33 @@ def _fence_findings(
     unclosed: SourceLine | None,
     misaligned: list[tuple[SourceLine, SourceLine]],
 ) -> list[Finding]:
-    """What fenced code hid: misaligned and unclosed fences (errors), then skipped lines."""
+    """What code blocks hid: misaligned and unclosed blocks (errors), then skipped lines."""
     found = []
-    for opened, closed in misaligned:
+    for opened, followed in misaligned:
+        kind = _block_kind(opened)
         found.append(
             Finding(
                 number,
                 title,
                 "FENCE_MISALIGNED",
-                f"the code fence opened at line {opened.number}, indented "
-                f"{len(opened.text) - len(opened.text.lstrip(' '))} spaces, is closed at "
-                f"line {closed.number}, indented less; in a list item that line would end "
-                "the item and open a new fence, so which lines are code is not known, and "
-                "no command in this document was executed. Indent the closing fence like "
-                "its opener",
+                f"the {kind} opened at line {opened.number}, indented "
+                f"{len(opened.text) - len(opened.text.lstrip(' '))} spaces, is followed at "
+                f"line {followed.number} by a line indented less; in a list item that line "
+                f"would end the item and the {kind} with it, so which lines are code is not "
+                "known, and no command in this document was executed. Indent every line of "
+                f"the {kind} at least as far as its first line",
             )
         )
     if unclosed is not None:
+        kind = _block_kind(unclosed)
         found.append(
             Finding(
                 number,
                 title,
                 "FENCE_UNCLOSED",
-                f"the code fence opened at line {unclosed.number} never closes, so every "
-                "line after it is code and none of it was checked, and no command in "
-                "this document was executed",
+                f"the {kind} opened at line {unclosed.number} never closes, so every line "
+                "after it is part of it and none of it was checked, and no command in this "
+                "document was executed",
             )
         )
     for skipped in fenced:
@@ -823,12 +847,16 @@ def _fence_findings(
                 number,
                 title,
                 "FENCED_LINE_SKIPPED",
-                f"line {skipped.number} is inside fenced code and was not read: "
-                f"{skipped.text.strip()}",
+                f"line {skipped.number} is inside fenced code or an HTML block and was not "
+                f"read: {skipped.text.strip()}",
                 severity=SEVERITY_INFO,
             )
         )
     return found
+
+
+def _block_kind(opened: SourceLine) -> str:
+    return "HTML block" if opened.text.lstrip().startswith("<") else "code fence"
 
 
 def _has_unclosed_fence(book: Runbook) -> bool:
@@ -850,6 +878,20 @@ def _has_misaligned_fence(book: Runbook) -> bool:
     document may read inverted with every fence closed: the even case D3 missed.
     """
     return bool(book.misaligned_fences) or any(step.misaligned_fences for step in book.steps)
+
+
+def _refuses_commands(book: Runbook) -> bool:
+    """Whether no command in the document may run, whatever else check() reports.
+
+    Each of these leaves the checker unsure how a command would run, or which lines
+    are commands at all; running anything then could run an example.
+    """
+    return (
+        bool(book.shell_in_steps)
+        or _misplaces_directory(book)
+        or _has_unclosed_fence(book)
+        or _has_misaligned_fence(book)
+    )
 
 
 def _misplaces_directory(book: Runbook) -> bool:
@@ -920,16 +962,9 @@ def _check(
     # were not defects (spec section 8).
     launcher = Launcher()
     misplaced_shell = set(book.shell_in_steps)
-    # A misplaced Working directory: stops every command, as a misplaced Shell: does
-    # (spec §9 and §11): ignoring either changes how the commands run. So does a
-    # fence that never closes, or one closed less indented than it opened: which
-    # lines are examples is then no longer known.
-    refuse_commands = (
-        bool(misplaced_shell)
-        or _misplaces_directory(book)
-        or _has_unclosed_fence(book)
-        or _has_misaligned_fence(book)
-    )
+    # A misplaced Shell: or Working directory:, or a code fence or HTML block whose
+    # extent is not known, stops every command (spec §9 and §11).
+    refuse_commands = _refuses_commands(book)
     shell_problem: str | None = None
     declared_shells = {_shell_of(d) or d.strip().casefold() for d in book.shell_declarations}
     if len(declared_shells) > 1:
