@@ -1,0 +1,110 @@
+python: /tmp/rdr-bin/python -> Python 3.12.3; uname: Linux 6.6.87.2-microsoft-standard-WSL2
+test_a_nul_byte_in_a_command_is_a_finding (test_checker.CommandsThatCannotStart.test_a_nul_byte_in_a_command_is_a_finding) ... ok
+test_a_chcp_in_a_command_does_not_outlive_the_check (test_checker.ConsoleCodePage.test_a_chcp_in_a_command_does_not_outlive_the_check) ... skipped 'the console code page is a Windows fact'
+test_within_the_run_the_new_page_carries_to_the_next_command (test_checker.ConsoleCodePage.test_within_the_run_the_new_page_carries_to_the_next_command)
+As in one terminal: step 2 is read in the page step 1 set, never reset per command. ... skipped 'the console code page is a Windows fact'
+test_failing_command_is_reported_at_step_two_only (test_checker.DefectIsReportedAtTheRightStep.test_failing_command_is_reported_at_step_two_only) ... ok
+test_missing_failure_branch_is_reported_at_step_two_only (test_checker.DefectIsReportedAtTheRightStep.test_missing_failure_branch_is_reported_at_step_two_only) ... ok
+test_unknown_control_is_reported_at_step_two_only (test_checker.DefectIsReportedAtTheRightStep.test_unknown_control_is_reported_at_step_two_only) ... ok
+test_unresolved_path_is_reported_at_step_three_only (test_checker.DefectIsReportedAtTheRightStep.test_unresolved_path_is_reported_at_step_three_only) ... ok
+test_execute_mode_does_not_run_the_destructive_command (test_checker.DestructiveStepsAreNeverExecuted.test_execute_mode_does_not_run_the_destructive_command) ... ok
+test_a_document_with_no_steps_says_so (test_checker.DocumentLevelDefects.test_a_document_with_no_steps_says_so) ... ok
+test_a_document_with_no_working_directory_says_so_at_document_level (test_checker.DocumentLevelDefects.test_a_document_with_no_working_directory_says_so_at_document_level) ... ok
+test_a_malformed_document_does_not_raise (test_checker.DocumentLevelDefects.test_a_malformed_document_does_not_raise) ... ok
+test_a_working_directory_inside_a_step_is_an_error_at_that_step (test_checker.DocumentLinesInsideAStep.test_a_working_directory_inside_a_step_is_an_error_at_that_step) ... ok
+test_a_working_directory_inside_a_step_stops_every_command (test_checker.DocumentLinesInsideAStep.test_a_working_directory_inside_a_step_stops_every_command)
+D1 = A: ignored, it would run the step from a directory its author did not mean. ... ok
+test_an_elements_line_inside_a_step_does_not_stop_commands (test_checker.DocumentLinesInsideAStep.test_an_elements_line_inside_a_step_does_not_stop_commands) ... ok
+test_an_elements_line_inside_a_step_is_an_error_at_that_step (test_checker.DocumentLinesInsideAStep.test_an_elements_line_inside_a_step_is_an_error_at_that_step) ... ok
+test_it_is_not_a_shell_finding (test_checker.DocumentLinesInsideAStep.test_it_is_not_a_shell_finding)
+SHELL_UNRESOLVED is read by --json consumers; its meaning stays as it was. ... ok
+test_the_same_line_fenced_inside_a_step_is_only_skipped (test_checker.DocumentLinesInsideAStep.test_the_same_line_fenced_inside_a_step_is_only_skipped) ... ok
+test_the_same_lines_before_the_first_step_report_nothing (test_checker.DocumentLinesInsideAStep.test_the_same_lines_before_the_first_step_report_nothing) ... ok
+test_a_command_that_fails_as_declared_reports_nothing (test_checker.ExpectedFailureDirective.test_a_command_that_fails_as_declared_reports_nothing)
+Zero findings AND proof the command ran. ... ok
+test_a_command_that_unexpectedly_succeeds_is_reported_at_step_two_only (test_checker.ExpectedFailureDirective.test_a_command_that_unexpectedly_succeeds_is_reported_at_step_two_only) ... ok
+test_nothing_is_checked_without_execute (test_checker.ExpectedFailureDirective.test_nothing_is_checked_without_execute) ... ok
+test_the_wrong_nonzero_code_is_still_a_finding (test_checker.ExpectedFailureDirective.test_the_wrong_nonzero_code_is_still_a_finding)
+Any non-zero is not the same as the declared one. ... ok
+test_a_fenced_document_line_before_the_first_step_is_not_read (test_checker.FencedCode.test_a_fenced_document_line_before_the_first_step_is_not_read) ... ok
+test_a_fenced_run_is_not_a_command (test_checker.FencedCode.test_a_fenced_run_is_not_a_command) ... ok
+test_a_fenced_step_heading_is_not_a_step (test_checker.FencedCode.test_a_fenced_step_heading_is_not_a_step) ... ok
+test_a_one_line_code_span_is_not_a_fence (test_checker.FencedCode.test_a_one_line_code_span_is_not_a_fence)
+```x``` on one line is inline code; read as a fence it would swallow the document. ... ok
+test_a_shorter_or_different_fence_does_not_close_it (test_checker.FencedCode.test_a_shorter_or_different_fence_does_not_close_it) ... ok
+test_a_tilde_fence_and_an_indented_fence_are_fences_too (test_checker.FencedCode.test_a_tilde_fence_and_an_indented_fence_are_fences_too) ... ok
+test_an_unclosed_fence_before_the_first_step_is_the_documents (test_checker.FencedCode.test_an_unclosed_fence_before_the_first_step_is_the_documents) ... ok
+test_an_unclosed_fence_is_recorded_where_it_opened (test_checker.FencedCode.test_an_unclosed_fence_is_recorded_where_it_opened) ... ok
+test_the_new_fields_are_appended_so_positional_callers_still_line_up (test_checker.FencedCode.test_the_new_fields_are_appended_so_positional_callers_still_line_up) ... ok
+test_a_fenced_run_is_never_executed_and_the_unfenced_one_is (test_checker.FencedCodeFindings.test_a_fenced_run_is_never_executed_and_the_unfenced_one_is) ... ok
+test_a_fenced_shell_line_inside_a_step_no_longer_refuses_the_document (test_checker.FencedCodeFindings.test_a_fenced_shell_line_inside_a_step_no_longer_refuses_the_document)
+KL-0256: a fenced Shell: example refused the whole document; now it is info only. ... ok
+test_an_unclosed_fence_before_any_step_is_reported_with_no_steps (test_checker.FencedCodeFindings.test_an_unclosed_fence_before_any_step_is_reported_with_no_steps) ... ok
+test_an_unclosed_fence_is_an_error_at_the_step_where_it_opened (test_checker.FencedCodeFindings.test_an_unclosed_fence_is_an_error_at_the_step_where_it_opened) ... ok
+test_shell_unresolved_names_every_case_that_emits_it (test_checker.FindingDescriptions.test_shell_unresolved_names_every_case_that_emits_it)
+A reader shown 'unknown or missing' for a misplaced line looks in the wrong place. ... ok
+test_the_codes_added_in_0_4_are_described (test_checker.FindingDescriptions.test_the_codes_added_in_0_4_are_described) ... ok
+test_a_followable_runbook_reports_nothing (test_checker.GoodRunbook.test_a_followable_runbook_reports_nothing) ... ok
+test_it_parses_every_step (test_checker.GoodRunbook.test_it_parses_every_step) ... ok
+test_a_gate_naming_a_later_step_is_reported (test_checker.ManualGateDirective.test_a_gate_naming_a_later_step_is_reported) ... ok
+test_a_gate_naming_a_step_that_does_not_exist_is_reported (test_checker.ManualGateDirective.test_a_gate_naming_a_step_that_does_not_exist_is_reported) ... ok
+test_a_gated_command_is_not_executed (test_checker.ManualGateDirective.test_a_gated_command_is_not_executed) ... ok
+test_no_deferral_is_reported_without_execute (test_checker.ManualGateDirective.test_no_deferral_is_reported_without_execute)
+Singling out gated steps when NO command ran would be noise. ... ok
+test_a_command_runs_in_the_checkers_own_process_group (test_checker.ProcessPlacement.test_a_command_runs_in_the_checkers_own_process_group) ... ok
+test_an_interrupted_check_stops_the_command (test_checker.ProcessPlacement.test_an_interrupted_check_stops_the_command)
+subprocess.run killed the child on any exception; _run must too. ... ok
+test_a_git_planted_in_the_current_directory_is_never_run (test_checker.ProgramLookup.test_a_git_planted_in_the_current_directory_is_never_run) ... skipped 'only Windows searches the current directory first'
+test_a_pwsh_planted_in_the_current_directory_is_not_chosen (test_checker.ProgramLookup.test_a_pwsh_planted_in_the_current_directory_is_not_chosen) ... skipped 'only Windows searches the current directory first'
+test_a_declared_bash_runs_every_command_in_bash (test_checker.ShellDirective.test_a_declared_bash_runs_every_command_in_bash) ... ok
+test_a_declared_pwsh_runs_the_command_in_pwsh (test_checker.ShellDirective.test_a_declared_pwsh_runs_the_command_in_pwsh) ... skipped 'pwsh is not installed'
+test_a_mangled_quote_would_be_caught (test_checker.ShellDirective.test_a_mangled_quote_would_be_caught)
+The round-trip step can fail: the same comparison with one space altered. ... ok
+test_a_runbook_built_positionally_against_0_2_still_lines_up (test_checker.ShellDirective.test_a_runbook_built_positionally_against_0_2_still_lines_up)
+Runbook is public API; a new field goes at the END, never in the middle. ... ok
+test_backslashes_reach_bash_unaltered (test_checker.ShellDirective.test_backslashes_reach_bash_unaltered)
+Windows re-parses a command line by rules Git Bash's runtime does not share. ... ok
+test_bash_output_is_read_as_utf_8 (test_checker.ShellDirective.test_bash_output_is_read_as_utf_8)
+Git Bash writes UTF-8; decoded with the ANSI code page, the detail was lost. ... ok
+test_cmd_output_is_read_in_the_console_code_page (test_checker.ShellDirective.test_cmd_output_is_read_in_the_console_code_page)
+cmd.exe writes into a pipe in the console's code page, not the ANSI one Python assumes. ... skipped 'the console code page is a Windows fact'
+test_pwsh_output_is_read_in_the_console_code_page (test_checker.ShellDirective.test_pwsh_output_is_read_in_the_console_code_page) ... skipped 'pwsh on Windows is not installed'
+test_the_backslash_probe_can_fail (test_checker.ShellDirective.test_the_backslash_probe_can_fail) ... ok
+test_the_pwsh_probe_fails_without_the_declaration (test_checker.ShellDirective.test_the_pwsh_probe_fails_without_the_declaration) ... skipped 'pwsh is not installed'
+test_the_same_commands_fail_without_the_declaration (test_checker.ShellDirective.test_the_same_commands_fail_without_the_declaration) ... ok
+test_the_shell_is_read_from_the_declarations_and_cannot_disagree (test_checker.ShellDirective.test_the_shell_is_read_from_the_declarations_and_cannot_disagree)
+check() reads both; two writable copies of one fact let a caller split them. ... ok
+test_the_shell_line_is_read_and_an_absent_one_is_none (test_checker.ShellDirective.test_the_shell_line_is_read_and_an_absent_one_is_none) ... ok
+test_a_git_installed_under_a_non_ascii_folder_is_found (test_checker.ShellResolution.test_a_git_installed_under_a_non_ascii_folder_is_found)
+git prints its exec path in UTF-8, which the ANSI code page cannot always decode. ... skipped 'the Git Bash lookup is Windows-only'
+test_a_git_that_never_answers_is_given_up_on (test_checker.ShellResolution.test_a_git_that_never_answers_is_given_up_on)
+The real program is cmd.exe's child and holds the pipe after cmd.exe is killed. ... skipped 'the Git Bash lookup is Windows-only'
+test_an_unknown_name_is_refused_with_the_known_names (test_checker.ShellResolution.test_an_unknown_name_is_refused_with_the_known_names) ... ok
+test_cmd_and_powershell_are_refused_elsewhere (test_checker.ShellResolution.test_cmd_and_powershell_are_refused_elsewhere) ... ok
+test_cmd_on_windows_is_the_platform_default (test_checker.ShellResolution.test_cmd_on_windows_is_the_platform_default) ... skipped 'cmd exists only on Windows'
+test_git_bash_is_an_alias_and_case_does_not_matter (test_checker.ShellResolution.test_git_bash_is_an_alias_and_case_does_not_matter) ... ok
+test_windows_bash_comes_from_git_never_from_path (test_checker.ShellResolution.test_windows_bash_comes_from_git_never_from_path)
+On the machine this was built on, PATH answers bash with the WSL launcher. ... skipped 'the Git Bash lookup is Windows-only'
+test_windows_bash_without_git_is_unresolved (test_checker.ShellResolution.test_windows_bash_without_git_is_unresolved) ... skipped 'the Git Bash lookup is Windows-only'
+test_at_least_one_fixture_produces_an_error (test_checker.TheSuiteCanActuallyFail.test_at_least_one_fixture_produces_an_error) ... ok
+test_the_good_fixture_and_a_bad_one_disagree (test_checker.TheSuiteCanActuallyFail.test_the_good_fixture_and_a_bad_one_disagree) ... ok
+test_a_timeout_in_the_platform_default_stops_the_command (test_checker.Timeouts.test_a_timeout_in_the_platform_default_stops_the_command) ... ok
+test_a_timeout_under_a_declared_shell_stops_the_command (test_checker.Timeouts.test_a_timeout_under_a_declared_shell_stops_the_command) ... ok
+test_a_document_with_nothing_to_run_never_asks (test_checker.UnresolvedShell.test_a_document_with_nothing_to_run_never_asks) ... ok
+test_a_shell_line_inside_a_step_is_refused_at_that_step (test_checker.UnresolvedShell.test_a_shell_line_inside_a_step_is_refused_at_that_step)
+Ignoring it would run bash commands in cmd.exe: the defect this directive removes. ... ok
+test_an_unavailable_shell_refuses_on_every_platform (test_checker.UnresolvedShell.test_an_unavailable_shell_refuses_on_every_platform) ... ok
+test_an_unknown_name_is_reported_without_execute_too (test_checker.UnresolvedShell.test_an_unknown_name_is_reported_without_execute_too)
+A name the tool does not know is a defect in the document, on any machine. ... ok
+test_an_unknown_shell_is_reported_once_and_nothing_runs (test_checker.UnresolvedShell.test_an_unknown_shell_is_reported_once_and_nothing_runs) ... ok
+test_two_different_shells_are_refused (test_checker.UnresolvedShell.test_two_different_shells_are_refused)
+Refused means not run: a command that succeeds anywhere cannot show that. ... ok
+test_two_names_for_the_same_shell_are_not_a_conflict (test_checker.UnresolvedShell.test_two_names_for_the_same_shell_are_not_a_conflict) ... ok
+test_without_execute_availability_is_never_checked (test_checker.UnresolvedShell.test_without_execute_availability_is_never_checked)
+The checking machine is not the reader's machine. ... ok
+
+----------------------------------------------------------------------
+Ran 80 tests in 10.332s
+
+OK (skipped=13)
+unittest exit=0
